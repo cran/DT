@@ -4,9 +4,12 @@
 \title{Create an HTML table widget using the DataTables library}
 \usage{
 datatable(data, options = list(), class = "display", callback = JS("return table;"), 
-    rownames, colnames, container, caption = NULL, filter = c("none", "bottom", "top"), 
-    escape = TRUE, style = "default", selection = c("multiple", "single", "none"), 
-    extensions = list())
+    rownames, colnames, container, caption = NULL, filter = c("none", 
+        "bottom", "top"), escape = TRUE, style = "default", width = NULL, 
+    height = NULL, elementId = NULL, fillContainer = getOption("DT.fillContainer", 
+        NULL), autoHideNavigation = getOption("DT.autoHideNavigation", 
+        NULL), selection = c("multiple", "single", "none"), extensions = list(), 
+    plugins = NULL)
 }
 \arguments{
 \item{data}{a data object (either a matrix or a data frame)}
@@ -64,13 +67,32 @@ third), or \code{c('Species', 'Sepal.Length')}}
 \item{style}{the style name (\url{http://datatables.net/manual/styling/});
 currently only \code{'default'} and \code{'bootstrap'} are supported}
 
-\item{selection}{the row selection mode (single or multiple selection or
-disable selection) when a table widget is rendered in a Shiny app}
+\item{width, height}{Width/Height in pixels (optional, defaults to automatic
+sizing)}
+
+\item{elementId}{An id for the widget (a random string by default).}
+
+\item{fillContainer}{\code{TRUE} to configure the table to automatically fill
+it's containing element. If the table can't fit fully into it's container
+then vertical and/or horizontal scrolling of the table cells will occur.}
+
+\item{autoHideNavigation}{\code{TRUE} to automatically hide navigational UI
+when the number of total records is less than the page size.}
+
+\item{selection}{the row/column selection mode (single or multiple selection
+or disable selection) when a table widget is rendered in a Shiny app;
+alternatively, you can use a list of the form \code{list(mode = 'multiple',
+selected = c(1, 3, 8), target = 'row')} to pre-select rows; the element
+\code{target} in the list can be \code{'column'} to enable column
+selection, or \code{'row+column'} to make it possible to select both rows
+and columns (click on the footer to select columns), or \code{'cell'} to
+select cells}
 
 \item{extensions}{a character vector of the names of the DataTables
-extensions (\url{http://datatables.net/extensions/index}), or a named list
-of initialization options for the extensions (the names of the list are the
-names of extensions)}
+extensions (\url{http://datatables.net/extensions/index})}
+
+\item{plugins}{a character vector of the names of DataTables plug-ins
+(\url{http://rstudio.github.io/DT/plugins.html})}
 }
 \description{
 This function creates an HTML widget to display rectangular data (a matrix or

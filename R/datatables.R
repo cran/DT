@@ -46,12 +46,26 @@
 #'   third), or \code{c('Species', 'Sepal.Length')}
 #' @param style the style name (\url{http://datatables.net/manual/styling/});
 #'   currently only \code{'default'} and \code{'bootstrap'} are supported
-#' @param selection the row selection mode (single or multiple selection or
-#'   disable selection) when a table widget is rendered in a Shiny app
+#' @param width,height Width/Height in pixels (optional, defaults to automatic
+#'   sizing)
+#' @param elementId An id for the widget (a random string by default).
+#' @param fillContainer \code{TRUE} to configure the table to automatically fill
+#'   it's containing element. If the table can't fit fully into it's container
+#'   then vertical and/or horizontal scrolling of the table cells will occur.
+#' @param autoHideNavigation \code{TRUE} to automatically hide navigational UI
+#'   when the number of total records is less than the page size.
+#' @param selection the row/column selection mode (single or multiple selection
+#'   or disable selection) when a table widget is rendered in a Shiny app;
+#'   alternatively, you can use a list of the form \code{list(mode = 'multiple',
+#'   selected = c(1, 3, 8), target = 'row')} to pre-select rows; the element
+#'   \code{target} in the list can be \code{'column'} to enable column
+#'   selection, or \code{'row+column'} to make it possible to select both rows
+#'   and columns (click on the footer to select columns), or \code{'cell'} to
+#'   select cells
 #' @param extensions a character vector of the names of the DataTables
-#'   extensions (\url{http://datatables.net/extensions/index}), or a named list
-#'   of initialization options for the extensions (the names of the list are the
-#'   names of extensions)
+#'   extensions (\url{http://datatables.net/extensions/index})
+#' @param plugins a character vector of the names of DataTables plug-ins
+#'   (\url{http://rstudio.github.io/DT/plugins.html})
 #' @note You are recommended to escape the table content for security reasons
 #'   (e.g. XSS attacks) when using this function in Shiny or any other dynamic
 #'   web applications.
@@ -62,14 +76,20 @@
 datatable = function(
   data, options = list(), class = 'display', callback = JS('return table;'),
   rownames, colnames, container, caption = NULL, filter = c('none', 'bottom', 'top'),
-  escape = TRUE, style = 'default',
-  selection = c('multiple', 'single', 'none'), extensions = list()
+  escape = TRUE, style = 'default', width = NULL, height = NULL, elementId = NULL,
+  fillContainer = getOption('DT.fillContainer', NULL),
+  autoHideNavigation = getOption('DT.autoHideNavigation', NULL),
+  selection = c('multiple', 'single', 'none'), extensions = list(), plugins = NULL
 ) {
 
   # yes, we all hate it
-  oop = options(stringsAsFactors = FALSE); on.exit(options(oop), add = TRUE)
+  oop = base::options(stringsAsFactors = FALSE); on.exit(base::options(oop), add = TRUE)
 
-  options = modifyList(getOption('DT.options', list()), options)
+  options = modifyList(
+    getOption('DT.options', list()),
+    if (is.function(options)) options() else options
+  )
+  params = list()
 
   # deal with row names: rownames = TRUE or missing, use rownames(data)
   rn = if (missing(rownames) || isTRUE(rownames)) base::rownames(data) else {
@@ -77,10 +97,12 @@ datatable = function(
   }
 
   hideDataTable = FALSE
-  if (is.null(data) || ncol(data) == 0) {
-    data = data.frame(numeric(0))
-    names(data) = " "
+  if (is.null(data) || identical(ncol(data), 0L)) {
+    data = matrix(ncol = 0, nrow = NROW(data))
     hideDataTable = TRUE
+  } else if (length(dim(data)) != 2) {
+    str(data)
+    stop("'data' must be 2-dimensional (e.g. data frame or matrix)")
   }
 
   if (is.data.frame(data)) {
@@ -92,7 +114,7 @@ datatable = function(
     numc = if (is.numeric(data)) seq_len(ncol(data))
     data = as.data.frame(data)
   }
-  if (length(rn)) {
+  if (!is.null(rn)) {
     data = cbind(' ' = rn, data)
     numc = numc + 1  # move indices of numeric columns to the right by 1
   }
@@ -126,38 +148,44 @@ datatable = function(
   if (length(colnames) && colnames[1] == ' ')
     options = appendColumnDefs(options, list(orderable = FALSE, targets = 0))
 
-  style = match.arg(style, list.files(depPath('datatables', 'css')))
+  style = match.arg(tolower(style), DTStyles())
   if (style == 'bootstrap') class = DT2BSClass(class)
+  if (style != 'default') params$style = style
+
+  # add class for fillContainer if necessary
+  if (isTRUE(fillContainer))
+    class = paste(class, 'fill-container');
 
   if (is.character(filter)) filter = list(position = match.arg(filter))
   filter = modifyList(list(position = 'none', clear = TRUE, plain = FALSE), filter)
   # HTML code for column filters
-  filterHTML = as.character(filterRow(data, length(rn) > 0 && colnames[1] == ' ', filter))
+  filterHTML = as.character(filterRow(data, !is.null(rn) && colnames[1] == ' ', filter))
   # use the first row in the header as the sorting cells when I put the filters
   # in the second row
   if (filter$position == 'top') options$orderCellsTop = TRUE
+  params$filter = filter$position
+  if (filter$position != 'none') params$filterHTML = filterHTML
+
   if (missing(container)) {
     container = tags$table(tableHeader(colnames, escape), class = class)
+  } else {
+    params$class = class
   }
 
   # indices of columns that need to be escaped
   attr(options, 'escapeIdx') = escapeToConfig(escape, colnames)
 
   if (is.list(extensions)) {
-    extOptions = extensions
     extensions = names(extensions)
-  } else if (is.character(extensions)) {
-    extOptions = setNames(vector('list', length(extensions)), extensions)
-  } else stop("'extensions' must be either a character vector or a named list")
+  } else if (!is.character(extensions)) {
+    stop("'extensions' must be either a character vector or a named list")
+  }
+  params$extensions = if (length(extensions)) as.list(extensions)
 
   # automatically configure options and callback for extensions
   if ('Responsive' %in% extensions) options$responsive = TRUE
-  # these extensions need to be initialized via new $.fn.dataTable...
-  extOptions = extOptions[intersect(extensions, extNew)]
 
-  # generate <caption></caption>
-  if (is.character(caption)) caption = tags$caption(caption)
-  caption = as.character(caption)
+  params$caption = captionString(caption)
 
   if (!identical(class(callback), class(JS(''))))
     stop("The 'callback' argument only accept a value returned from JS()")
@@ -167,44 +195,58 @@ datatable = function(
     if (identical(options$lengthMenu, c(10, 25, 50, 100)))
       options$lengthMenu = NULL  # that is just the default
   }
-  # if you use copy_csv_xls.swf, we should disable the pdf button in TableTools
-  swf = options$tableTools$sSwfPath
-  if (length(swf) == 1 && length(options$tableTools$aButtons) == 0) {
-    if (basename(swf) == 'copy_csv_xls.swf')
-      options$tableTools$aButtons = c('copy', 'csv', 'xls', 'print')
+
+  # record fillContainer and autoHideNavigation
+  if (!is.null(fillContainer)) params$fillContainer = fillContainer
+  if (!is.null(autoHideNavigation)) params$autoHideNavigation = autoHideNavigation
+
+  params = structure(modifyList(params, list(
+    data = data, container = as.character(container), options = options,
+    callback = if (!missing(callback)) JS('function(table) {', callback, '}')
+  )), colnames = cn, rownames = length(rn) > 0)
+  # selection parameters in shiny
+  if (inShiny()) {
+    if (is.character(selection)) {
+      selection = list(mode = match.arg(selection))
+    }
+    selection = modifyList(
+      list(mode = 'multiple', selected = NULL, target = 'row'), selection
+    )
+    # for compatibility with DT < 0.1.22 ('selected' could be row names)
+    if (grepl('^row', selection$target) && is.character(selection$selected) && length(rn)) {
+      selection$selected = match(selection$selected, rn)
+    }
+    params$selection = selection
   }
 
-  params = structure(list(
-    data = data, container = as.character(container), options = options,
-    callback = if (!missing(callback)) JS('function(table) {', callback, '}'),
-    caption = caption, filter = filter$position
-  ), colnames = cn, rownames = length(rn) > 0)
-  if (length(params$caption) == 0) params$caption = NULL
-  if (params$filter != 'none') params$filterHTML = filterHTML
-  if (style != 'default') params$style = style
-  if (length(extensions)) params$extensions = as.list(extensions)
-  if (length(extOptions)) params$extOptions = extOptions
-  if (inShiny()) params$selection = match.arg(selection)
-
-  deps = list(htmlDependency(
-    'datatables', DataTablesVersion, src = depPath('datatables', 'js'),
-    script = 'jquery.dataTables.min.js'
+  deps = list(DTDependency(style))
+  deps = c(deps, unlist(
+    lapply(extensions, extDependency, style, options),
+    recursive = FALSE
   ))
-  deps = c(deps, list(styleDependency(style)))
-  deps = c(deps, lapply(extensions, extDependency))
   if (params$filter != 'none') deps = c(deps, filterDependencies())
   if (isTRUE(options$searchHighlight))
     deps = c(deps, list(pluginDependency('searchHighlight')))
+  if (length(plugins))
+    deps = c(deps, lapply(plugins, pluginDependency))
+
+  # force width and height to NULL for fillContainer
+  if (isTRUE(fillContainer)) {
+    width = NULL
+    height = NULL
+  }
 
   htmlwidgets::createWidget(
     'datatables', if (hideDataTable) NULL else params,
-    package = 'DT', width = '100%', height = 'auto',
+    package = 'DT', width = width, height = height, elementId = elementId,
+    sizingPolicy = htmlwidgets::sizingPolicy(
+      knitr.figure = FALSE, knitr.defaultWidth = "100%", knitr.defaultHeight = "auto"
+    ),
     dependencies = deps, preRenderHook = function(instance) {
 
       data = instance[['x']][['data']]
 
       # 1.5Mb is just an arbitrary size from my experiments
-      # TODO: Move this to widget_data override, or preRenderHook
       if (object.size(data) > 1.5e6 && getOption('DT.warn.size', TRUE))
         warning(
           'It seems your data is too big for client-side DataTables. You may ',
@@ -313,6 +355,13 @@ filterRow = function(
 ) {
   if (filter$position == 'none') return()
   tds = list()
+  decimals = function(x) {
+    x = abs(na.omit(x))
+    if (length(x) == 0) return()
+    i = 0L
+    while (i < 15 && any(round(x, i) != x)) i = i + 1L
+    if (i > 0L) i
+  }
   for (j in seq_len(ncol(data))) {
     if (j == 1 && rownames) {
       tds[[j]] = tags$td('')  # no filter for row names (may change in future)
@@ -321,8 +370,9 @@ filterRow = function(
     t = NULL
     d = data[, j]
     x = if (is.numeric(d) || is.Date(d)) {
-      t = if (is.numeric(d)) 'number' else 'time'
-      if (is.integer(d)) t = 'integer'
+      t = if (is.numeric(d)) {
+        if (is.integer(d)) 'integer' else 'number'
+      } else 'time'
       if (t == 'time') {
         # JavaScript does have the Date type like R (YYYY-mm-dd without time)
         if (inherits(d, 'Date')) {
@@ -330,30 +380,42 @@ filterRow = function(
         }
         d = as.numeric(d) * 1000  # use milliseconds for JavaScript
       }
-      tags$div(
+      suppressWarnings({
+        d1 = min(d, na.rm = TRUE)
+        d2 = max(d, na.rm = TRUE)
+      })
+      dec = decimals(d)
+      if (!is.null(dec)) {
+        d1 = floor(d1 * 10^dec) / 10^dec
+        d2 = ceiling(d2 * 10^dec) / 10^dec
+      }
+      if (is.finite(d1) && is.finite(d2) && d2 > d1) tags$div(
         style = 'display: none; position: absolute; width: 200px;',
-        tags$div(
-          `data-min` = min(d, na.rm = TRUE), `data-max` = max(d, na.rm = TRUE)
-        ),
+        tags$div(`data-min` = d1, `data-max` = d2, `data-scale` = dec),
         tags$span(style = 'float: left;'), tags$span(style = 'float: right;')
-      )
+      ) else {
+        t = 'disabled'
+        NULL
+      }
     } else if (is.factor(d) || is.logical(d)) {
-      if (is.logical(d)) {
+      if (length(unique(d)) <= 1) {
+        t = 'disabled'
+      } else if (is.logical(d)) {
         t = 'logical'
         d = c('true', 'false', if (any(is.na(d))) 'na')
       } else {
         t = 'factor'
         d = sort(unique(d))
       }
-      tags$div(
+      if (t != 'disabled') tags$div(
         tags$select(
           multiple = 'multiple', style = 'width: 100%;',
-          lapply(d, function(x) tags$option(value = x, x))
+          `data-options` = jsonlite::toJSON(as.character(d))
         ),
         style = 'width: 100%; display: none;'
       )
     } else if (is.character(d)) {
-      t = 'character'
+      t = if (length(unique(d)) <= 1) 'disabled' else 'character'
       NULL
     }
     clear = filter$clear
@@ -401,7 +463,15 @@ depPath = function(...) {
   system.file('htmlwidgets', 'lib', ..., package = 'DT')
 }
 
-extNew = c('AutoFill', 'FixedColumns', 'FixedHeader', 'KeyTable')
+depName = function(style = 'default', ...) {
+  tolower(paste(c(..., if (style != 'default') c('-', style)), collapse = ''))
+}
+
+DTStyles = function() {
+  r = '^dataTables[.]([^.]+)[.]min[.]css$'
+  x = list.files(depPath('datatables', 'css'), r)
+  c('default', gsub(r, '\\1', x))
+}
 
 extPath = function(...) {
   depPath('datatables-extensions', ...)
@@ -411,44 +481,80 @@ extAll = function() {
   list.dirs(extPath(), FALSE, FALSE)
 }
 
-extDependency = function(extension) {
-  # correct ExtName to extName just in case
-  extension = sub('^(.)', '\\L\\1', extension, perl = TRUE)
-  if (!(extension %in% extAll())) stop('The extension ', extension, 'does not exist')
-  js = sprintf('dataTables.%s.min.js', extension)
-  css = sprintf('dataTables.%s.min.css', extension)
-  htmlDependency(
-    paste('datatables', extension, sep = '-'), DataTablesVersion, extPath(extension),
-    script = js, stylesheet = css
+extDependency = function(extension, style, options) {
+  if (!(extension %in% extAll())) stop('The extension ', extension, ' does not exist')
+  src = extPath(extension)
+  ext = sub('^(.)', '\\L\\1', extension, perl = TRUE)
+  buttonDeps = NULL
+  if (extension == 'Buttons') {
+    buttons = listButtons(options)
+    buttonDeps = extraDependency(
+      c(if ('excel' %in% buttons) 'jszip', if ('pdf' %in% buttons) 'pdfmake'),
+      extension, 'js'
+    )
+    js = c(
+      sprintf('dataTables.%s.min.js', ext),
+      sprintf('buttons.%s.min.js', c('flash', 'html5', 'colVis', 'print'))
+    )
+  } else js = sprintf('dataTables.%s.min.js', ext)
+  if (style != 'default') js = c(js, sprintf('%s.%s.min.js', ext, style))
+  css = sprintf('%s.%s.min.css', ext, if (style == 'default') 'dataTables' else style)
+  js = file.path('js', js); css = file.path('css', css)
+  in_dir(src, {
+    js = existing_files(js); css = existing_files(css)
+  })
+  deps = htmlDependency(
+    depName(style, 'dt-ext-', extension), DataTablesVersion, src,
+    script = js, stylesheet = css, all_files = FALSE
   )
+  append(buttonDeps, list(deps))
 }
 
-#' Copy the Flash SWF file from the TableTools extension
-#'
-#' This is a convenience function to copy the SWF file since the TableTools
-#' extension depends on it.
-#' @param dest the destination directory
-#' @param pdf \code{TRUE} if you want to save the table as PDF
-#'   (\file{copy_csv_xls_pdf.swf} will be copied); \code{FALSE} otherwise (use
-#'   \file{copy_csv_xls.swf})
-#' @references \url{http://datatables.net/extensions/tabletools}
-#' @return A character string of the path of the SWF file, which may be used as
-#'   the \code{sSwfPath} option for TableTools.
-#' @export
-copySWF = function(dest = '.', pdf = FALSE) {
-  if (!file_test('-d', dest)) stop("'dest' must be a directory")
-  swf = if (pdf) 'copy_csv_xls_pdf.swf' else 'copy_csv_xls.swf'
-  file.copy(extPath(swf), dest, overwrite = TRUE)
-  if (sub('/$', '', dest) == 'www') dest = sub('www/?', '', dest)
-  if (dest == '') dest = '.'
-  file.path(dest, swf, fsep = '/')
+# whether a button was configured in the options
+listButtons = function(options) {
+  config = options[['buttons']]
+  if (is.null(config)) return()
+  if (is.character(config)) return(config)
+  if (is.list(config)) return(unlist(lapply(config, function(cfg) {
+    if (is.character(cfg)) return(cfg)
+    if (is.list(cfg)) {
+      extend = cfg$extend
+      return(if (extend != 'collection') extend else listButtons(cfg))
+    }
+  })))
+  stop('Options for DataTables extensions must be either a character vector or a list')
 }
 
-styleDependency = function(style) {
-  d = depPath('datatables', 'css', style)
+extraDepData = list(
+  jszip = list(script = 'jszip.min.js'),
+  pdfmake = list(script = c('pdfmake.min.js', 'vfs_fonts.js'))
+)
+
+extraDependency = function(names = NULL, ...) {
+  lapply(names, function(name) {
+    htmlDependency(
+      name, DataTablesVersion, extPath(...),
+      script = extraDepData[[name]][['script']], all_files = FALSE
+    )
+  })
+}
+
+# core JS and CSS dependencies of DataTables
+DTDependency = function(style) {
+  js = 'jquery.dataTables.min.js'
+  if (style == 'default') {
+    # patch the default style
+    css = c('jquery.dataTables.min.css', 'jquery.dataTables.extra.css')
+  } else {
+    js = c(js, sprintf('dataTables.%s.min.js', style))
+    css = sprintf('dataTables.%s.min.css', style)
+    # patch the Bootstrap style
+    if (style == 'bootstrap') css = c(css, 'dataTables.bootstrap.extra.css')
+  }
   htmlDependency(
-    paste('datatables', style, sep = '-'), DataTablesVersion, src = d,
-    script = list.files(d, '[.]min[.]js$'), stylesheet = list.files(d, '[.]css$')
+    depName(style, 'dt-core'), DataTablesVersion, src = depPath('datatables'),
+    script = file.path('js', js), stylesheet = file.path('css', css),
+    all_files = FALSE
   )
 }
 
@@ -472,7 +578,7 @@ DT2BSClass = function(class) {
 pluginDependency = function(plugin) {
   d = depPath('datatables-plugins', plugin)
   htmlDependency(
-    paste('datatables', plugin, sep = '-'), DataTablesVersion, src = d,
+    paste0('dt-plugin-', tolower(plugin)), DataTablesVersion, src = d,
     script = list.files(d, '[.]js$'), stylesheet = list.files(d, '[.]css$')
   )
 }

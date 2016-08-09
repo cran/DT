@@ -1,5 +1,9 @@
 name: DT-filter
 account: yihui
 server: shinyapps.io
-bundleId: 152909
-url: http://yihui.shinyapps.io/DT-filter
+appId: 36229
+bundleId: 519181
+url: https://yihui.shinyapps.io/DT-filter/
+when: 1469808832.61345
+asMultiple: FALSE
+asStatic: FALSE

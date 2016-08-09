@@ -14,7 +14,8 @@ formatColumns = function(table, columns, template, ...) {
 #'
 #' Format numeric columns in a table as currency (\code{formatCurrency()}) or
 #' percentages (\code{formatPercentage()}), or round numbers to a specified
-#' number of decimal places (\code{formatRound()}). The function
+#' number of decimal places (\code{formatRound()}), or a specified number
+#' of significant figures (\code{formatSignif()}).  The function
 #' \code{formatStyle()} applies CSS styles to table cells by column.
 #' @param table a table object created from \code{\link{datatable}()}
 #' @param columns the indices of the columns to be formatted (can be character,
@@ -23,6 +24,8 @@ formatColumns = function(table, columns, template, ...) {
 #' @param currency the currency symbol
 #' @param interval put a marker after how many digits of the numbers
 #' @param mark the marker after every \code{interval} decimals in the numbers
+#' @param dec.mark a character to indicate the decimal point
+#' @param before whether to place the currency symbol before or after the values
 #' @param method the method(s) to convert a date to string in JavaScript; see
 #'   \code{DT:::DateMethods} for a list of possible methods, and
 #'   \url{http://mzl.la/1xGe99W} for a full reference
@@ -41,6 +44,9 @@ formatColumns = function(table, columns, template, ...) {
 #' # the first two columns are Euro currency, and round column E to 3 decimal places
 #' datatable(m) %>% formatCurrency(1:2, '\U20AC') %>% formatRound('E', 3)
 #'
+#' # render vapor pressure with only two significant figures.
+#' datatable(pressure) %>% formatSignif('pressure',2)
+#'
 #' # apply CSS styles to columns
 #' datatable(iris) %>%
 #'   formatStyle('Sepal.Length', fontWeight = styleInterval(5, c('bold', 'weight'))) %>%
@@ -48,8 +54,21 @@ formatColumns = function(table, columns, template, ...) {
 #'     color = styleInterval(3.4, c('red', 'white')),
 #'     backgroundColor = styleInterval(3.4, c('yellow', 'gray'))
 #'   )
-formatCurrency = function(table, columns, currency = '$', interval = 3, mark = ',') {
-  formatColumns(table, columns, tplCurrency, currency, interval, mark)
+formatCurrency = function(
+  table, columns, currency = '$', interval = 3, mark = ',', digits = 2,
+  dec.mark = getOption('OutDec'), before = TRUE
+) {
+  currency = gsub("'", "\\\\'", currency)
+  mark = gsub("'", "\\\\'", mark)
+  formatColumns(table, columns, tplCurrency, currency, interval, mark, digits, dec.mark, before)
+}
+
+#' @export
+#' @rdname formatCurrency
+#' @param prefix string to put in front of the column values
+#' @param suffix string to put after the column values
+formatString = function(table, columns, prefix = '', suffix = '') {
+  formatColumns(table, columns, tplString, prefix, suffix)
 }
 
 #' @export
@@ -67,10 +86,21 @@ formatRound = function(table, columns, digits = 2) {
 
 #' @export
 #' @rdname formatCurrency
+formatSignif = function(table, columns, digits = 2) {
+  formatColumns(table, columns, tplSignif, digits)
+}
+
+#' @export
+#' @rdname formatCurrency
 formatDate = function(table, columns, method = 'toDateString') {
   formatColumns(table, columns, tplDate, method)
 }
 
+#' @param valueColumns indices of the columns from which the cell values are
+#'   obtained; this can be different with the \code{columns} argument, e.g. you
+#'   may style one column based on the values of a different column
+#' @param target the target to apply the CSS styles to (the current cell or the
+#'   full row)
 #' @param fontWeight the font weight, e.g. \code{'bold'} and \code{'normal'}
 #' @param color the font color, e.g. \code{'red'} and \code{'#ee00aa'}
 #' @param backgroundColor the background color of table cells
@@ -87,67 +117,67 @@ formatDate = function(table, columns, method = 'toDateString') {
 #' @export
 #' @rdname formatCurrency
 formatStyle = function(
-  table, columns, fontWeight = NULL, color = NULL, backgroundColor = NULL,
-  background = NULL, ...
+  table, columns, valueColumns = columns, target = c('cell', 'row'),
+  fontWeight = NULL, color = NULL, backgroundColor = NULL, background = NULL, ...
 ) {
   styles = dropNULL(list(
     fontWeight = fontWeight, color = color, backgroundColor = backgroundColor,
     background = background, ...
   ))
-  formatColumns(table, columns, tplStyle, styles)
+  formatColumns(table, columns, tplStyle, valueColumns, match.arg(target), styles)
 }
 
 # turn character/logical indices to numeric indices
-name2int = function(name, names) {
+name2int = function(name, names, rownames) {
   if (is.numeric(name)) {
-    return(if (all(name > 0)) name else seq_along(names)[name])
+    i = if (all(name >= 0)) name else seq_along(names)[name]
+    if (!rownames) i = i - 1
+    return(i)
   }
-  names = setNames(seq_along(names), names)
-  unname(names[name])
+  i = unname(setNames(seq_along(names), names)[name]) - 1
+  if (any(is.na(i))) stop(
+    'You specified the columns: ', paste(name, collapse = ', '), ', ',
+    'but the column names of the data are ', paste(names, collapse = ', ')
+  )
+  i
 }
 
 appendFormatter = function(js, name, names, rownames = TRUE, template, ...) {
   js = if (length(js) == 0) c('function(row, data) {', '}') else {
     unlist(strsplit(as.character(js), '\n'))
   }
-  i = name2int(name, names)
-  if (is.character(name) || (is.numeric(name) && !rownames)) i = i - 1
-  if (any(is.na(i))) stop(
-    'You specified the columns: ', paste(name, collapse = ', '), ', ',
-    'but the column names of the data are ', paste(names, collapse = ', ')
-  )
+  i = name2int(name, names, rownames)
   JS(append(
     js, after = 1,
-    template(i, ...)
+    template(i, ..., names, rownames)
   ))
 }
 
-tplCurrency = function(cols, currency, interval, mark) {
+tplCurrency = function(cols, currency, interval, mark, digits, dec.mark, before, ...) {
   sprintf(
-    "var d = parseFloat(data[%d]); $(this.api().cell(row, %d).node()).html(isNaN(d) ? '' : '%s' + d.toString().replace(/\\B(?=(\\d{%d})+(?!\\d))/g, '%s'));",
-    cols, cols, currency, interval, mark
+    "DTWidget.formatCurrency(this, row, data, %d, '%s', %d, %d, '%s', '%s', %s);",
+    cols, currency, digits, interval, mark, dec.mark, if (before) 'true' else 'false'
   )
 }
 
-tplPercentage = function(cols, digits) {
-  sprintf(
-    "var d = parseFloat(data[%d]); $(this.api().cell(row, %s).node()).html(isNaN(d) ? '' : (d * 100).toFixed(%d) + '%%');",
-    cols, cols, digits
-  )
+tplString = function(cols, prefix, suffix, ...) {
+  sprintf("DTWidget.formatString(this, row, data, %d, '%s', '%s');", cols, prefix, suffix)
 }
 
-tplRound = function(cols, digits) {
-  sprintf(
-    "var d = parseFloat(data[%d]); $(this.api().cell(row, %s).node()).html(isNaN(d) ? '' : d.toFixed(%d));",
-    cols, cols, digits
-  )
+tplPercentage = function(cols, digits, ...) {
+  sprintf("DTWidget.formatPercentage(this, row, data, %d, %s);", cols, digits)
 }
 
-tplDate = function(cols, method) {
-  sprintf(
-    "var d = new Date(data[%d]); $(this.api().cell(row, %s).node()).html(d['%s']());",
-    cols, cols, method
-  )
+tplRound = function(cols, digits, ...) {
+  sprintf("DTWidget.formatRound(this, row, data, %d, %d);", cols, digits)
+}
+
+tplSignif = function(cols, digits, ...) {
+  sprintf("DTWidget.formatSignif(this, row, data, %d, %d);", cols, digits)
+}
+
+tplDate = function(cols, method, ...) {
+  sprintf("DTWidget.formatDate(this, row, data, %d, '%s')", cols, method);
 }
 
 DateMethods = c(
@@ -155,7 +185,7 @@ DateMethods = c(
   'toLocaleTimeString', 'toString', 'toTimeString', 'toUTCString'
 )
 
-tplStyle = function(cols, styles) {
+tplStyle = function(cols, valueCols, target, styles, ...) {
   if (length(styles) == 0) return()
   if (!is.list(styles)) stop("'styles' must be a list")
   JSclass = class(JS(''))
@@ -166,9 +196,18 @@ tplStyle = function(cols, styles) {
     if (isJS) s else sprintf("'%s'", s)
   }, FUN.VALUE = character(1))
   css = paste(sprintf("'%s':%s", upperToDash(names(styles)), styles), collapse = ',')
-  sprintf(
-    "var value=data[%s]; $(this.api().cell(row, %s).node()).css({%s});",
-    cols, cols, css
+  valueCols = name2int(valueCols, ...)
+  switch(
+    target,
+    cell = sprintf(
+      "var value=data[%s]; if (value!==null) $(this.api().cell(row, %s).node()).css({%s});",
+      valueCols, cols, css
+    ),
+    row = sprintf(
+      "var value=data[%s]; if (value!==null) $(row).css({%s});",
+      valueCols, css
+    ),
+    stop('Invalid target!')
   )
 }
 
@@ -229,16 +268,22 @@ styleEqual = function(levels, values) {
   JS(paste0(js, "''"))
 }
 
-#' @param data the numeric vector to be represented as color bars (in fact, only
-#'   its range, i.e. min and max, is needed here)
+#' @param data a numeric vector whose range will be used for scaling the
+#' table data from 0-100 before being represented as color bars. A vector
+#' of length 2 is acceptable here for specifying a range possibly wider or
+#' narrower than the range of the table data itself.
 #' @param color the color of the bars
+#' @param angle a number of degrees representing the direction to fill the
+#' gradient relative to a horizontal line and the gradient line, going
+#' counter-clockwise. For example, 90 fills right to left and -90 fills
+#' left to right.
 #' @export
 #' @rdname styleInterval
-styleColorBar = function(data, color) {
+styleColorBar = function(data, color, angle=90) {
   rg = range(data, na.rm = TRUE, finite = TRUE)
   r1 = rg[1]; r2 = rg[2]; r = r2 - r1
   JS(sprintf(
-    "isNaN(parseFloat(value)) || value == %s ? '' : 'linear-gradient(90deg, transparent ' + (%s - value)/%s * 100 + '%%, %s ' + (%s - value)/%s * 100 + '%%)'",
-    r1, r2, r, color, r2, r
+    "isNaN(parseFloat(value)) || value <= %s ? '' : 'linear-gradient(%sdeg, transparent ' + (%s - value)/%s * 100 + '%%, %s ' + (%s - value)/%s * 100 + '%%)'",
+    r1, angle, r2, r, color, r2, r
   ))
 }

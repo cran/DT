@@ -1,11 +1,3 @@
-checkShinyVersion = function() {
-  if (packageVersion('shiny') < '0.12.0') stop(
-    'DT requires shiny >= 0.12.0. ',
-    'Please install the latest version of shiny from CRAN: ',
-    'update.packages(ask = FALSE)'
-  )
-}
-
 #' Helper functions for using DT in Shiny
 #'
 #' These two functions are like most \code{fooOutput()} and \code{renderFoo()}
@@ -30,7 +22,6 @@ checkShinyVersion = function() {
 #'   )
 #' }
 dataTableOutput = function(outputId, width = '100%', height = 'auto') {
-  checkShinyVersion()
   htmlwidgets::shinyWidgetOutput(
     outputId, 'datatables', width, height, package = 'DT'
   )
@@ -51,7 +42,6 @@ dataTableOutput = function(outputId, width = '100%', height = 'auto') {
 #'   additional arguments to \code{datatable()} when \code{expr} returns a data
 #'   object
 renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = FALSE, ...) {
-  checkShinyVersion()
   if (!quoted) expr = substitute(expr)
 
   # TODO: this can be simplified after this htmlwidgets PR is merged
@@ -64,10 +54,8 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
     instance = exprFunc()
     if (!all(c('datatables', 'htmlwidget') %in% class(instance))) {
       instance = datatable(instance, ...)
-    } else {
-      if (length(list(...)) != 0) {
-        warning("renderDataTable ignores ... arguments when expr yields a datatable object; see ?renderDataTable")
-      }
+    } else if (length(list(...)) != 0) {
+      warning("renderDataTable ignores ... arguments when expr yields a datatable object; see ?renderDataTable")
     }
 
     # in the server mode, we should not store the full data in JSON
@@ -110,6 +98,180 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
   })
 }
 
+#' Manipulate an existing DataTables instance in a Shiny app
+#'
+#' The function \code{datatableProxy()} creates a proxy object that can be used
+#' to manipulate an existing DataTables instance in a Shiny app, e.g. select
+#' rows/columns, or add rows.
+#' @param outputId the id of the table to be manipulated (the same id as the one
+#'   you used in \code{\link{dataTableOutput}()})
+#' @param session the Shiny session object (from the server function of the
+#'   Shiny app)
+#' @param deferUntilFlush whether an action should be carried out right away, or
+#'   should be held until after the next time all of the outputs are updated
+#' @note \code{addRow()} only works for client-side tables. If you want to use
+#'   it in a Shiny app, make sure to use \code{renderDataTable(..., server =
+#'   FALSE)}.
+#' @references \url{http://rstudio.github.io/DT/shiny.html}
+#' @rdname proxy
+#' @export
+dataTableProxy = function(
+  outputId, session = shiny::getDefaultReactiveDomain(), deferUntilFlush = TRUE
+) {
+  if (is.null(session))
+    stop('datatableProxy() must be called from the server function of a Shiny app')
+
+  structure(
+    list(id = outputId, session = session, deferUntilFlush = deferUntilFlush),
+    class = 'datatableProxy'
+  )
+}
+
+#' @param proxy a proxy object returned by \code{dataTableProxy()}
+#' @param selected an integer vector of row/column indices, or a matrix of two
+#'   columns (row and column indices, respectively) for cell indices; you may
+#'   use \code{NULL} to clear existing selections
+#' @rdname proxy
+#' @export
+selectRows = function(proxy, selected) {
+  invokeRemote(proxy, 'selectRows', list(I(selected)))
+}
+
+#' @rdname proxy
+#' @export
+selectColumns = function(proxy, selected) {
+  invokeRemote(proxy, 'selectColumns', list(I(selected)))
+}
+
+#' @rdname proxy
+#' @export
+selectCells = function(proxy, selected) {
+  invokeRemote(proxy, 'selectCells', list(selected))
+}
+
+#' @param data a single row of data to be added to the table; it can be a matrix
+#'   or data frame of one row, or a vector or list of row data (in the latter
+#'   case, please be cautious about the row name: if your table contains row
+#'   names, here \code{data} must also contain the row name as the first
+#'   element)
+#' @rdname proxy
+#' @export
+addRow = function(proxy, data) {
+  if ((is.matrix(data) || is.data.frame(data)) && nrow(data) != 1)
+    stop("'data' must be of only one row")
+  invokeRemote(proxy, 'addRow', list(as.list(unname(data)), I(rownames(data))))
+}
+
+#' @rdname proxy
+#' @export
+clearSearch = function(proxy) {
+  updateSearch(proxy, list(global = '', columns = ''))
+}
+
+#' @param page a number indicating the page to select
+#' @rdname proxy
+#' @export
+selectPage = function(proxy, page) {
+  invokeRemote(proxy, 'selectPage', list(page))
+}
+
+#' @param caption a new table caption (see the \code{caption} argument of
+#'   \code{\link{datatable}()})
+#' @rdname proxy
+#' @export
+updateCaption = function(proxy, caption) {
+  invokeRemote(proxy, 'updateCaption', list(captionString(caption)))
+}
+
+#' @param keywords a list of two components: \code{global} is the global search
+#'   keyword of a single character string (ignored if \code{NULL});
+#'   \code{columns} is a character vector of the search keywords for all columns
+#'   (when the table has one column for the row names, this vector of keywords
+#'   should contain one keyword for the row names as well)
+#' @rdname proxy
+#' @export
+updateSearch = function(proxy, keywords = list(global = NULL, columns = NULL)) {
+  global = keywords$global
+  if (is.null(global)) {
+    keywords['global'] = list(NULL)
+  } else {
+    if (!is.character(global) || length(global) != 1)
+      stop('keywords$global must be a character string')
+  }
+  columns = keywords$columns
+  if (is.null(columns)) {
+    keywords['columns'] = list(NULL)
+  } else {
+    if (is.character(columns)) {
+      if (length(columns) == 0) stop(
+        'The length of keywords$columns must be greater than zero if it is a character vector'
+      )
+    } else if (is.list(columns)) {
+      if (any(sapply(columns, length) > 1)) stop(
+        'keywords$columns should be a list of NULL or character strings'
+      )
+    } else stop('keywords$columns must be either a character vector or a list')
+  }
+  invokeRemote(proxy, 'updateSearch', list(keywords))
+}
+
+#' @param resetPaging whether to reset the paging position
+#' @param clearSelection which existing selections to clear: it can be any
+#'   combinations of \code{row}, \code{column}, and \code{cell}, or \code{all}
+#'   for all three, or \code{none} to keep current selections (by default, all
+#'   selections are cleared after the data is reloaded)
+#' @note \code{reloadData()} only works for tables in the server-side processing
+#'   mode, e.g. tables rendered with \code{renderDataTable(server = TRUE)}. The
+#'   data to be reloaded (i.e. the one you pass to \code{dataTableAjax()}) must
+#'   have exactly the same number of columns as the previous data object in the
+#'   table.
+#' @rdname proxy
+#' @export
+reloadData = function(
+  proxy, resetPaging = TRUE, clearSelection = c('all', 'none', 'row', 'column', 'cell')
+) {
+  if ('all' %in% clearSelection) clearSelection = c('row', 'column', 'cell')
+  invokeRemote(proxy, 'reloadData', list(resetPaging, clearSelection))
+}
+
+#' Replace data in an existing table
+#'
+#' Replace the data object of a table output and avoid regenerating the full
+#' table, in which case the state of the current table will be preserved
+#' (sorting, filtering, and pagination) and applied to the table with new data.
+#' @param proxy a proxy object created by \code{dataTableProxy()}
+#' @param data the new data object to be loaded in the table
+#' @param ... other arguments to be passed to \code{\link{dataTableAjax}()}
+#' @param resetPaging,clearSelection passed to \code{\link{reloadData}()}
+#' @note When you replace the data in an existing table, please make sure the
+#'   new data has the same number of columns as the current data. When you have
+#'   enabled column filters, you should also make sure the attributes of every
+#'   column remain the same, e.g. factor columns should have the same or fewer
+#'   levels, and numeric columns should have the same or smaller range,
+#'   otherwise the filters may never be able to reach certain rows in the data.
+#' @export
+replaceData = function(proxy, data, ..., resetPaging = TRUE, clearSelection = 'all') {
+  dataTableAjax(proxy$session, data, ..., outputId = proxy$id)
+  reloadData(proxy, resetPaging, clearSelection)
+}
+
+invokeRemote = function(proxy, method, args = list()) {
+  if (!inherits(proxy, 'datatableProxy'))
+    stop('Invalid proxy argument; table proxy object was expected')
+
+  msg = list(id = proxy$id, call = list(method = method, args = args))
+
+  sess = proxy$session
+  if (proxy$deferUntilFlush) {
+    sess$onFlushed(function() {
+      sess$sendCustomMessage('datatable-calls', msg)
+    }, once = TRUE)
+  } else {
+    sess$sendCustomMessage('datatable-calls', msg)
+  }
+  proxy
+}
+
 shinyFun = function(name) getFromNamespace(name, 'shiny')
 
 #' Register a data object in a shiny session for DataTables
@@ -137,16 +299,18 @@ shinyFun = function(name) getFromNamespace(name, 'shiny')
 #'   and \code{params} (Ajax parameters, a list of the form \code{list(search =
 #'   list(value = 'FOO', regex = 'false'), length = 10, ...)}) that return the
 #'   filtered table result according to the DataTables Ajax request
+#' @param outputId the output ID of the table (the same ID passed to
+#'   \code{dataTableOutput()}; if missing, a random string)
 #' @references \url{http://rstudio.github.io/DT/server.html}
 #' @return A character string (an Ajax URL that can be queried by DataTables).
 #' @example inst/examples/ajax-shiny.R
 #' @export
-dataTableAjax = function(session, data, rownames, filter = dataTablesFilter) {
+dataTableAjax = function(session, data, rownames, filter = dataTablesFilter, outputId) {
 
   oop = options(stringsAsFactors = FALSE); on.exit(options(oop), add = TRUE)
 
   # abuse tempfile() to obtain a random id unique to this R session
-  id = basename(tempfile(''))
+  if (missing(outputId)) outputId = basename(tempfile(''))
 
   # deal with row names: rownames = TRUE or missing, use rownames(data)
   rn = if (missing(rownames) || isTRUE(rownames)) base::rownames(data) else {
@@ -155,7 +319,7 @@ dataTableAjax = function(session, data, rownames, filter = dataTablesFilter) {
   data = as.data.frame(data)  # think dplyr
   if (length(rn)) data = cbind(' ' = rn, data)
 
-  sessionDataURL(session, data, id, filter)
+  sessionDataURL(session, data, outputId, filter)
 }
 
 sessionDataURL = function(session, data, id, filter) {
@@ -180,7 +344,7 @@ sessionDataURL = function(session, data, id, filter) {
     res = tryCatch(filter(data, params), error = function(e) {
       list(error = as.character(e))
     })
-    httpResponse(200, 'application/json', enc2utf8(toJSON(res)))
+    httpResponse(200, 'application/json', enc2utf8(toJSON(res, dataframe = 'rows')))
   }
 
   session$registerDataObj(id, data, filterFun)
@@ -191,17 +355,28 @@ dataTablesFilter = function(data, params) {
   n = nrow(data)
   q = params
   ci = q$search[['caseInsensitive']] == 'true'
+  # users may be updating the table too frequently
+  if (length(q$columns) != ncol(data)) return(list(
+    draw = as.integer(q$draw),
+    recordsTotal = n,
+    recordsFiltered = 0,
+    data = list(),
+    DT_rows_all = seq_len(n),
+    DT_rows_current = list()
+  ))
 
   # global searching
-  i = seq_len(n)
+  i = logical(n)
   # for some reason, q$search might be NULL, leading to error `if (logical(0))`
-  if (isTRUE(q$search[['value']] != '')) {
-    i0 = apply(data, 2, function(x) {
-      grep2(q$search[['value']], as.character(x),
-            fixed = q$search[['regex']] == 'false', ignore.case = ci)
-    })
-    i = intersect(i, unique(unlist(i0)))
-  }
+  if (isTRUE(q$search[['value']] != '')) for (j in seq_len(ncol(data))) {
+    if (q$columns[[j]][['searchable']] != 'true') next
+    i0 = grep2(
+      q$search[['value']], as.character(data[, j]),
+      fixed = q$search[['regex']] == 'false', ignore.case = ci
+    )
+    i[i0] = TRUE
+  } else i = !i
+  i = which(i)
 
   # search by columns
   if (length(i)) for (j in names(q$columns)) {
@@ -225,6 +400,7 @@ dataTablesFilter = function(data, params) {
     if (length(i) == 0) break
   }
   if (length(i) != n) data = data[i, , drop = FALSE]
+  iAll = i  # row indices of filtered data
 
   # sorting
   oList = list()
@@ -240,28 +416,43 @@ dataTablesFilter = function(data, params) {
   if (length(oList)) {
     i = do.call(order, oList)
     data = data[i, , drop = FALSE]
+    iAll = iAll[i]
   }
   # paging
   if (q$length != '-1') {
-    i = seq(as.integer(q$start) + 1L, length.out = as.integer(q$length))
+    len = as.integer(q$length)
+    # I don't know why this can happen, but see https://github.com/rstudio/DT/issues/164
+    if (is.na(len)) {
+      warning("The DataTables parameter 'length' is '", q$length, "' (invalid).")
+      len = 0
+    }
+    i = seq(as.integer(q$start) + 1L, length.out = len)
     i = i[i <= nrow(data)]
     fdata = data[i, , drop = FALSE]  # filtered data
-  } else fdata = data
-
-  fdata = unname(as.matrix(fdata))
-  if (is.character(fdata) && q$escape != 'false') {
-    if (q$escape == 'true') fdata = htmlEscape(fdata) else {
-      k = as.integer(strsplit(q$escape, ',')[[1]])
-      # use seq_len() in case escape = negative indices, e.g. c(-1, -5)
-      for (j in seq_len(ncol(fdata))[k]) fdata[, j] = htmlEscape(fdata[, j])
-    }
+    iCurrent = iAll[i]
+  } else {
+    fdata = data
+    iCurrent = iAll
   }
 
+  if (q$escape != 'false') {
+    k = seq_len(ncol(fdata))
+    if (q$escape != 'true') {
+      # q$escape might be negative indices, e.g. c(-1, -5)
+      k = k[as.integer(strsplit(q$escape, ',')[[1]])]
+    }
+    for (j in k) if (maybe_character(fdata[, j])) fdata[, j] = htmlEscape(fdata[, j])
+  }
+
+  # TODO: if iAll is just 1:n, is it necessary to pass this vector to JSON, then
+  # to R? When n is large, it may not be very efficient
   list(
     draw = as.integer(q$draw),
     recordsTotal = n,
     recordsFiltered = nrow(data),
-    data = fdata
+    data = unname(fdata),
+    DT_rows_all = iAll,
+    DT_rows_current = iCurrent
   )
 }
 
@@ -301,6 +492,11 @@ filterRange = function(d, string) {
   d >= r1 & d <= r2
 }
 
+# treat factors as characters
+maybe_character = function(x) {
+  is.character(x) || is.factor(x)
+}
+
 fixServerOptions = function(options) {
   options$serverSide = TRUE
   if (is.null(options$processing)) options$processing = TRUE
@@ -319,6 +515,9 @@ fixServerOptions = function(options) {
       tolower(!isFALSE(options[['search']]$caseInsensitive))
     ),
     sprintf('d.escape = %s;', attr(options, 'escapeIdx', exact = TRUE)),
+    'var encodeAmp = function(x) { x.value = x.value.replace(/&/g, "%26"); }',
+    'encodeAmp(d.search);',
+    '$.each(d.columns, function(i, v) {encodeAmp(v.search);});',
     '}'
   )
   options

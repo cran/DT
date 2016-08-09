@@ -1,8 +1,9 @@
 name: DT-rows
 account: yihui
 server: shinyapps.io
-bundleId: 193011
-url: https://yihui.shinyapps.io/DT-rows
-when: 1432585659.28758
+appId: 44234
+bundleId: 519186
+url: https://yihui.shinyapps.io/DT-rows/
+when: 1469809057.10392
 asMultiple: FALSE
 asStatic: FALSE

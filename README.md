@@ -10,7 +10,7 @@ You may install the stable version from CRAN, or the development version using *
 
 ```r
 # install from CRAN
-install.packages('DT', repos = 'http://cran.rstudio.com')
+install.packages('DT')
 
 # or the development version if necessary
 devtools::install_github('rstudio/DT')
@@ -18,4 +18,4 @@ devtools::install_github('rstudio/DT')
 # then try DT::datatable(iris) as a hello world example
 ```
 
-See the full documentation at <http://rstudio.github.io/DT>.
+See the full documentation at <http://rstudio.github.io/DT>. Please use [Github issues](https://github.com/rstudio/DT/issues) if you want to file bug reports or feature requests, and you may use [StackOverflow](http://stackoverflow.com/questions/tagged/dt) or the [shiny-discuss](https://groups.google.com/forum/#!forum/shiny-discuss) mailing list to ask questions.

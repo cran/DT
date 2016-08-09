@@ -4,19 +4,27 @@
 \alias{formatDate}
 \alias{formatPercentage}
 \alias{formatRound}
+\alias{formatSignif}
+\alias{formatString}
 \alias{formatStyle}
 \title{Format table columns}
 \usage{
-formatCurrency(table, columns, currency = "$", interval = 3, mark = ",")
+formatCurrency(table, columns, currency = "$", interval = 3, mark = ",", digits = 2, 
+    dec.mark = getOption("OutDec"), before = TRUE)
+
+formatString(table, columns, prefix = "", suffix = "")
 
 formatPercentage(table, columns, digits = 0)
 
 formatRound(table, columns, digits = 2)
 
+formatSignif(table, columns, digits = 2)
+
 formatDate(table, columns, method = "toDateString")
 
-formatStyle(table, columns, fontWeight = NULL, color = NULL, backgroundColor = NULL, 
-    background = NULL, ...)
+formatStyle(table, columns, valueColumns = columns, target = c("cell", "row"), 
+    fontWeight = NULL, color = NULL, backgroundColor = NULL, background = NULL, 
+    ...)
 }
 \arguments{
 \item{table}{a table object created from \code{\link{datatable}()}}
@@ -33,9 +41,24 @@ equivalent to \code{c('V1', 'V2')})}
 
 \item{digits}{the number of decimal places to round to}
 
+\item{dec.mark}{a character to indicate the decimal point}
+
+\item{before}{whether to place the currency symbol before or after the values}
+
+\item{prefix}{string to put in front of the column values}
+
+\item{suffix}{string to put after the column values}
+
 \item{method}{the method(s) to convert a date to string in JavaScript; see
 \code{DT:::DateMethods} for a list of possible methods, and
 \url{http://mzl.la/1xGe99W} for a full reference}
+
+\item{valueColumns}{indices of the columns from which the cell values are
+obtained; this can be different with the \code{columns} argument, e.g. you
+may style one column based on the values of a different column}
+
+\item{target}{the target to apply the CSS styles to (the current cell or the
+full row)}
 
 \item{fontWeight}{the font weight, e.g. \code{'bold'} and \code{'normal'}}
 
@@ -58,7 +81,8 @@ dash-separated names (e.g. \code{'fontWeight'} will be converted to
 \description{
 Format numeric columns in a table as currency (\code{formatCurrency()}) or
 percentages (\code{formatPercentage()}), or round numbers to a specified
-number of decimal places (\code{formatRound()}). The function
+number of decimal places (\code{formatRound()}), or a specified number
+of significant figures (\code{formatSignif()}).  The function
 \code{formatStyle()} applies CSS styles to table cells by column.
 }
 \examples{
@@ -72,6 +96,9 @@ datatable(m) \%>\% formatCurrency(c('A', 'C')) \%>\% formatPercentage('D', 2)
 
 # the first two columns are Euro currency, and round column E to 3 decimal places
 datatable(m) \%>\% formatCurrency(1:2, '\\U20AC') \%>\% formatRound('E', 3)
+
+# render vapor pressure with only two significant figures.
+datatable(pressure) \%>\% formatSignif('pressure',2)
 
 # apply CSS styles to columns
 datatable(iris) \%>\%

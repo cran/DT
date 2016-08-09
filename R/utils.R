@@ -17,3 +17,17 @@ upperToDash = function(x) {
 
 # not rigorous, but should work in most cases
 inShiny = function() 'shiny' %in% loadedNamespaces()
+
+in_dir = function(dir, expr) {
+  owd = setwd(dir); on.exit(setwd(owd))
+  expr
+}
+
+existing_files = function(x) x[file.exists(x)]
+
+# generate <caption></caption>
+captionString = function(caption) {
+  if (is.character(caption)) caption = tags$caption(caption)
+  caption = as.character(caption)
+  if (length(caption)) caption
+}
