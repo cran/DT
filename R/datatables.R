@@ -63,13 +63,14 @@
 #'   and columns (click on the footer to select columns), or \code{'cell'} to
 #'   select cells
 #' @param extensions a character vector of the names of the DataTables
-#'   extensions (\url{http://datatables.net/extensions/index})
+#'   extensions (\url{https://datatables.net/extensions/index})
 #' @param plugins a character vector of the names of DataTables plug-ins
-#'   (\url{http://rstudio.github.io/DT/plugins.html})
+#'   (\url{https://rstudio.github.io/DT/plugins.html})
+#' @param editable \code{TRUE} to enable table editor.
 #' @note You are recommended to escape the table content for security reasons
 #'   (e.g. XSS attacks) when using this function in Shiny or any other dynamic
 #'   web applications.
-#' @references See \url{http://rstudio.github.io/DT} for the full documentation.
+#' @references See \url{https://rstudio.github.io/DT} for the full documentation.
 #' @importFrom htmltools tags htmlDependency
 #' @export
 #' @example inst/examples/datatable.R
@@ -79,7 +80,8 @@ datatable = function(
   escape = TRUE, style = 'default', width = NULL, height = NULL, elementId = NULL,
   fillContainer = getOption('DT.fillContainer', NULL),
   autoHideNavigation = getOption('DT.autoHideNavigation', NULL),
-  selection = c('multiple', 'single', 'none'), extensions = list(), plugins = NULL
+  selection = c('multiple', 'single', 'none'), extensions = list(), plugins = NULL,
+  editable = FALSE
 ) {
 
   # yes, we all hate it
@@ -90,6 +92,11 @@ datatable = function(
     if (is.function(options)) options() else options
   )
   params = list()
+
+  if (crosstalk::is.SharedData(data)) {
+    params$crosstalkOptions = list(key = data$key(), group = data$groupName())
+    data = data$data(withSelection = FALSE, withFilter = TRUE, withKey = FALSE)
+  }
 
   # deal with row names: rownames = TRUE or missing, use rownames(data)
   rn = if (missing(rownames) || isTRUE(rownames)) base::rownames(data) else {
@@ -109,8 +116,10 @@ datatable = function(
     data = as.data.frame(data)
     numc = unname(which(vapply(data, is.numeric, logical(1))))
   } else {
-    if (!is.matrix(data))
-      stop("'data' must be either a matrix or a data frame")
+    if (!is.matrix(data)) stop(
+      "'data' must be either a matrix or a data frame, and cannot be ",
+      classes(data), ' (you may need to coerce it to matrix or data frame)'
+    )
     numc = if (is.numeric(data)) seq_len(ncol(data))
     data = as.data.frame(data)
   }
@@ -120,9 +129,14 @@ datatable = function(
   }
 
   # align numeric columns to the right
-  if (length(numc)) options = appendColumnDefs(
-    options, list(className = 'dt-right', targets = numc - 1)
-  )
+  if (length(numc)) {
+    # if the `className` of the column has already been defined by the user,
+    # we should not touch it
+    undefined_numc = setdiff(numc - 1, classNameDefinedColumns(options))
+    if (length(undefined_numc)) options = appendColumnDefs(
+      options, list(className = 'dt-right', targets = undefined_numc)
+    )
+  }
 
   # make sure the table is _not_ ordered by default (change the DataTables default)
   if (is.null(options[['order']])) options$order = list()
@@ -153,8 +167,7 @@ datatable = function(
   if (style != 'default') params$style = style
 
   # add class for fillContainer if necessary
-  if (isTRUE(fillContainer))
-    class = paste(class, 'fill-container');
+  if (isTRUE(fillContainer)) class = paste(class, 'fill-container')
 
   if (is.character(filter)) filter = list(position = match.arg(filter))
   filter = modifyList(list(position = 'none', clear = TRUE, plain = FALSE), filter)
@@ -187,6 +200,8 @@ datatable = function(
 
   params$caption = captionString(caption)
 
+  if (editable) params$editable = editable
+
   if (!identical(class(callback), class(JS(''))))
     stop("The 'callback' argument only accept a value returned from JS()")
   if (length(options$pageLength) && length(options$lengthMenu) == 0) {
@@ -204,8 +219,8 @@ datatable = function(
     data = data, container = as.character(container), options = options,
     callback = if (!missing(callback)) JS('function(table) {', callback, '}')
   )), colnames = cn, rownames = length(rn) > 0)
-  # selection parameters in shiny
-  if (inShiny()) {
+  # selection parameters in shiny (or crosstalk)
+  if (inShiny() || length(params$crosstalkOptions)) {
     if (is.character(selection)) {
       selection = list(mode = match.arg(selection))
     }
@@ -229,6 +244,7 @@ datatable = function(
     deps = c(deps, list(pluginDependency('searchHighlight')))
   if (length(plugins))
     deps = c(deps, lapply(plugins, pluginDependency))
+  deps = c(deps, crosstalk::crosstalkLibs())
 
   # force width and height to NULL for fillContainer
   if (isTRUE(fillContainer)) {
@@ -250,7 +266,7 @@ datatable = function(
       if (object.size(data) > 1.5e6 && getOption('DT.warn.size', TRUE))
         warning(
           'It seems your data is too big for client-side DataTables. You may ',
-          'consider server-side processing: http://rstudio.github.io/DT/server.html'
+          'consider server-side processing: https://rstudio.github.io/DT/server.html'
         )
 
       data = escapeData(data, escape, colnames)
@@ -269,6 +285,17 @@ appendColumnDefs = function(options, def) {
   options$columnDefs = defs
   options
 }
+
+classNameDefinedColumns = function(options) {
+  defs = options[['columnDefs']]
+  cols = integer()
+  for (def in defs) {
+    if (!is.null(def[['className']]) && is.numeric(col <- def[['targets']]))
+      cols = c(cols, col)
+  }
+  unique(cols)
+}
+
 
 # convert character indices to numeric
 convertIdx = function(i, names, n = length(names), invert = FALSE) {
@@ -410,7 +437,7 @@ filterRow = function(
       if (t != 'disabled') tags$div(
         tags$select(
           multiple = 'multiple', style = 'width: 100%;',
-          `data-options` = jsonlite::toJSON(as.character(d))
+          `data-options` = native_encode(jsonlite::toJSON(as.character(d)))
         ),
         style = 'width: 100%; display: none;'
       )

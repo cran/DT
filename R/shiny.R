@@ -7,25 +7,34 @@
 #' @inheritParams shiny::dataTableOutput
 #' @param width the width of the table container
 #' @param height the height of the table container
-#' @references \url{http://rstudio.github.io/DT/shiny.html}
+#' @references \url{https://rstudio.github.io/DT/shiny.html}
 #' @export
 #' @examples # !formatR
 #' if (interactive()) {
 #'   library(shiny)
+#'   library(DT)
 #'   shinyApp(
-#'     ui = fluidPage(fluidRow(column(12, DT::dataTableOutput('tbl')))),
+#'     ui = fluidPage(fluidRow(column(12, DTOutput('tbl')))),
 #'     server = function(input, output) {
-#'       output$tbl = DT::renderDataTable(
+#'       output$tbl = renderDT(
 #'         iris, options = list(lengthChange = FALSE)
 #'       )
 #'     }
 #'   )
 #' }
 dataTableOutput = function(outputId, width = '100%', height = 'auto') {
-  htmlwidgets::shinyWidgetOutput(
-    outputId, 'datatables', width, height, package = 'DT'
+  htmltools::attachDependencies(
+    htmlwidgets::shinyWidgetOutput(
+      outputId, 'datatables', width, height, package = 'DT'
+    ),
+    crosstalk::crosstalkLibs(),
+    append = TRUE
   )
 }
+
+#' @export
+#' @rdname dataTableOutput
+DTOutput = dataTableOutput
 
 #' @export
 #' @rdname dataTableOutput
@@ -51,6 +60,7 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
 
   exprFunc = shiny::exprToFunction(expr, env, quoted = TRUE)
   widgetFunc = function() {
+    opts = options(DT.datatable.shiny = TRUE); on.exit(options(opts), add = TRUE)
     instance = exprFunc()
     if (!all(c('datatables', 'htmlwidget') %in% class(instance))) {
       instance = datatable(instance, ...)
@@ -60,6 +70,10 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
 
     # in the server mode, we should not store the full data in JSON
     if (server && !is.null(instance[['x']])) {
+      if (!is.null(instance$x$crosstalkOptions$group)) {
+        stop("Crosstalk only works with DT client mode: DT::renderDataTable({...}, server=FALSE)")
+      }
+
       origData = instance[['x']][['data']]
       instance$x$data = NULL
 
@@ -86,7 +100,7 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
     widgetFunc(), dataTableOutput, environment(), FALSE
   )
 
-  shiny::markRenderFunction(dataTableOutput, function(shinysession, name, ...) {
+  func = shiny::markRenderFunction(dataTableOutput, function(shinysession, name, ...) {
     currentSession <<- shinysession
     currentOutputName <<- name
     on.exit({
@@ -96,7 +110,23 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
 
     renderFunc()
   })
+
+  # This snapshotPreprocessOutput function was added in shiny 1.0.3.9002
+  if (exists("snapshotPreprocessOutput", asNamespace("shiny"))) {
+    func = shiny::snapshotPreprocessOutput(func, function(value) {
+      # Looks for a string like this in the JSON:
+      # "url":"session/2a2b834d90637a7559f3ebaba460ad10/dataobj/table?w=&nonce=aea032f33aedfd0e",
+      # and removes it, so that the value isn't saved in test snapshots.
+      gsub('"ajax"\\s*:\\s*\\{\\s*"url"\\s*:\\s*"[^"]*"\\s*,?', '"ajax":{', value)
+    })
+  }
+
+  func
 }
+
+#' @export
+#' @rdname dataTableOutput
+renderDT = renderDataTable
 
 #' Manipulate an existing DataTables instance in a Shiny app
 #'
@@ -111,8 +141,11 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
 #'   should be held until after the next time all of the outputs are updated
 #' @note \code{addRow()} only works for client-side tables. If you want to use
 #'   it in a Shiny app, make sure to use \code{renderDataTable(..., server =
-#'   FALSE)}.
-#' @references \url{http://rstudio.github.io/DT/shiny.html}
+#'   FALSE)}. Also note that the column filters (if used) of the table will not
+#'   be automatically updated when a new row is added, e.g., the range of the
+#'   slider of a column will stay the same even if you have added a value
+#'   outside the range of the original data column.
+#' @references \url{https://rstudio.github.io/DT/shiny.html}
 #' @rdname proxy
 #' @export
 dataTableProxy = function(
@@ -121,10 +154,10 @@ dataTableProxy = function(
   if (is.null(session))
     stop('datatableProxy() must be called from the server function of a Shiny app')
 
-  structure(
-    list(id = outputId, session = session, deferUntilFlush = deferUntilFlush),
-    class = 'datatableProxy'
-  )
+  structure(list(
+    id = session$ns(outputId), rawId = outputId, session = session,
+    deferUntilFlush = deferUntilFlush
+  ), class = 'datatableProxy')
 }
 
 #' @param proxy a proxy object returned by \code{dataTableProxy()}
@@ -134,14 +167,16 @@ dataTableProxy = function(
 #' @rdname proxy
 #' @export
 selectRows = function(proxy, selected) {
-  invokeRemote(proxy, 'selectRows', list(I(selected)))
+  invokeRemote(proxy, 'selectRows', list(I_null(selected)))
 }
 
 #' @rdname proxy
 #' @export
 selectColumns = function(proxy, selected) {
-  invokeRemote(proxy, 'selectColumns', list(I(selected)))
+  invokeRemote(proxy, 'selectColumns', list(I_null(selected)))
 }
+
+I_null = function(x) if (is.null(x)) list() else x
 
 #' @rdname proxy
 #' @export
@@ -251,7 +286,7 @@ reloadData = function(
 #'   otherwise the filters may never be able to reach certain rows in the data.
 #' @export
 replaceData = function(proxy, data, ..., resetPaging = TRUE, clearSelection = 'all') {
-  dataTableAjax(proxy$session, data, ..., outputId = proxy$id)
+  dataTableAjax(proxy$session, data, ..., outputId = proxy$rawId)
   reloadData(proxy, resetPaging, clearSelection)
 }
 
@@ -301,7 +336,7 @@ shinyFun = function(name) getFromNamespace(name, 'shiny')
 #'   filtered table result according to the DataTables Ajax request
 #' @param outputId the output ID of the table (the same ID passed to
 #'   \code{dataTableOutput()}; if missing, a random string)
-#' @references \url{http://rstudio.github.io/DT/server.html}
+#' @references \url{https://rstudio.github.io/DT/server.html}
 #' @return A character string (an Ajax URL that can be queried by DataTables).
 #' @example inst/examples/ajax-shiny.R
 #' @export
@@ -366,17 +401,28 @@ dataTablesFilter = function(data, params) {
   ))
 
   # global searching
-  i = logical(n)
   # for some reason, q$search might be NULL, leading to error `if (logical(0))`
-  if (isTRUE(q$search[['value']] != '')) for (j in seq_len(ncol(data))) {
-    if (q$columns[[j]][['searchable']] != 'true') next
-    i0 = grep2(
-      q$search[['value']], as.character(data[, j]),
-      fixed = q$search[['regex']] == 'false', ignore.case = ci
-    )
-    i[i0] = TRUE
-  } else i = !i
-  i = which(i)
+  if (length(v <- q$search[['value']]) > 0) {
+    if (!identical(q$search[['smart']], 'false')) {
+      v = unlist(strsplit(gsub('^\\s+|\\s+$', '', v), '\\s+'))
+    }
+  }
+  if (length(v) == 0) v = ''
+  m = if ((nv <- length(v)) > 1) array(FALSE, c(dim(data), nv)) else logical(n)
+  # TODO: this searching method may not be efficient and need optimization
+  i = if (!identical(v, '')) {
+    for (j in seq_len(ncol(data))) {
+      if (q$columns[[j]][['searchable']] != 'true') next
+      for (k in seq_len(nv)) {
+        i0 = grep2(
+          v[k], as.character(data[, j]), fixed = q$search[['regex']] == 'false',
+          ignore.case = ci
+        )
+        if (nv > 1) m[i0, j, k] = TRUE else m[i0] = TRUE
+      }
+    }
+    which(if (nv > 1) apply(m, 1, function(z) all(colSums(z) > 0)) else m)
+  } else seq_len(n)
 
   # search by columns
   if (length(i)) for (j in names(q$columns)) {
@@ -450,14 +496,14 @@ dataTablesFilter = function(data, params) {
     draw = as.integer(q$draw),
     recordsTotal = n,
     recordsFiltered = nrow(data),
-    data = unname(fdata),
+    data = cleanDataFrame(fdata),
     DT_rows_all = iAll,
     DT_rows_current = iCurrent
   )
 }
 
 # when both ignore.case and fixed are TRUE, we use grep(ignore.case = FALSE,
-# fixed = TRUE) to do lower-case matching of pattern on x
+# fixed = TRUE) to do lower-case matching of pattern on x; assume value = FALSE
 grep2 = function(pattern, x, ignore.case = FALSE, fixed = FALSE, ...) {
   if (fixed && ignore.case) {
     pattern = tolower(pattern)
@@ -497,6 +543,20 @@ maybe_character = function(x) {
   is.character(x) || is.factor(x)
 }
 
+# make sure we have a tidy data frame (no unusual structures in it)
+cleanDataFrame = function(x) {
+  x = unname(x)  # remove column names
+  if (!is.data.frame(x)) return(x)
+  for (j in seq_len(ncol(x))) {
+    xj = x[, j]
+    xj = unname(xj)  # remove names
+    dim(xj) = NULL  # drop dimensions
+    if (is.table(xj)) xj = c(xj)  # drop the table class
+    x[, j] = xj
+  }
+  unname(x)
+}
+
 fixServerOptions = function(options) {
   options$serverSide = TRUE
   if (is.null(options$processing)) options$processing = TRUE
@@ -513,6 +573,10 @@ fixServerOptions = function(options) {
     sprintf(
       'd.search.caseInsensitive = %s;',
       tolower(!isFALSE(options[['search']]$caseInsensitive))
+    ),
+    sprintf(
+      'd.search.smart = %s;',
+      tolower(!isFALSE(options[['search']]$smart))
     ),
     sprintf('d.escape = %s;', attr(options, 'escapeIdx', exact = TRUE)),
     'var encodeAmp = function(x) { x.value = x.value.replace(/&/g, "%26"); }',

@@ -26,10 +26,7 @@ formatColumns = function(table, columns, template, ...) {
 #' @param mark the marker after every \code{interval} decimals in the numbers
 #' @param dec.mark a character to indicate the decimal point
 #' @param before whether to place the currency symbol before or after the values
-#' @param method the method(s) to convert a date to string in JavaScript; see
-#'   \code{DT:::DateMethods} for a list of possible methods, and
-#'   \url{http://mzl.la/1xGe99W} for a full reference
-#' @references See \url{http://rstudio.github.io/DT/functions.html} for detailed
+#' @references See \url{https://rstudio.github.io/DT/functions.html} for detailed
 #'   documentation and examples.
 #' @export
 #' @examples # !formatR
@@ -74,26 +71,39 @@ formatString = function(table, columns, prefix = '', suffix = '') {
 #' @export
 #' @rdname formatCurrency
 #' @param digits the number of decimal places to round to
-formatPercentage = function(table, columns, digits = 0) {
-  formatColumns(table, columns, tplPercentage, digits)
+formatPercentage = function(
+  table, columns, digits = 0, interval = 3, mark = ',', dec.mark = getOption('OutDec')
+) {
+  formatColumns(table, columns, tplPercentage, digits, interval, mark, dec.mark)
 }
 
 #' @export
 #' @rdname formatCurrency
-formatRound = function(table, columns, digits = 2) {
-  formatColumns(table, columns, tplRound, digits)
+formatRound = function(
+  table, columns, digits = 2, interval = 3, mark = ',', dec.mark = getOption('OutDec')
+) {
+  formatColumns(table, columns, tplRound, digits, interval, mark, dec.mark)
 }
 
 #' @export
 #' @rdname formatCurrency
-formatSignif = function(table, columns, digits = 2) {
-  formatColumns(table, columns, tplSignif, digits)
+formatSignif = function(
+  table, columns, digits = 2, interval = 3, mark = ',', dec.mark = getOption('OutDec')
+) {
+  formatColumns(table, columns, tplSignif, digits, interval, mark, dec.mark)
 }
 
 #' @export
 #' @rdname formatCurrency
-formatDate = function(table, columns, method = 'toDateString') {
-  formatColumns(table, columns, tplDate, method)
+#' @param method the method(s) to convert a date to string in JavaScript; see
+#'   \code{DT:::DateMethods} for a list of possible methods, and
+#'   \url{http://mzl.la/1xGe99W} for a full reference
+#' @param params a list parameters for the specific date conversion method,
+#'   e.g., for the \code{toLocaleDateString()} method, your browser may support
+#'   \code{params = list('ko-KR', list(year = 'numeric', month = 'long', day =
+#'   'numeric'))}
+formatDate = function(table, columns, method = 'toDateString', params = NULL) {
+  formatColumns(table, columns, tplDate, method, params)
 }
 
 #' @param valueColumns indices of the columns from which the cell values are
@@ -164,20 +174,30 @@ tplString = function(cols, prefix, suffix, ...) {
   sprintf("DTWidget.formatString(this, row, data, %d, '%s', '%s');", cols, prefix, suffix)
 }
 
-tplPercentage = function(cols, digits, ...) {
-  sprintf("DTWidget.formatPercentage(this, row, data, %d, %s);", cols, digits)
+tplPercentage = function(cols, digits, interval, mark, dec.mark, ...) {
+  sprintf(
+    "DTWidget.formatPercentage(this, row, data, %d, %s, %s, '%s', '%s');",
+    cols, digits, interval, mark, dec.mark
+  )
 }
 
-tplRound = function(cols, digits, ...) {
-  sprintf("DTWidget.formatRound(this, row, data, %d, %d);", cols, digits)
+tplRound = function(cols, digits, interval, mark, dec.mark, ...) {
+  sprintf(
+    "DTWidget.formatRound(this, row, data, %d, %d, %s, '%s', '%s');",
+    cols, digits, interval, mark, dec.mark
+  )
 }
 
-tplSignif = function(cols, digits, ...) {
-  sprintf("DTWidget.formatSignif(this, row, data, %d, %d);", cols, digits)
+tplSignif = function(cols, digits, interval, mark, dec.mark, ...) {
+  sprintf(
+    "DTWidget.formatSignif(this, row, data, %d, %d, %d, '%s', '%s');",
+    cols, digits, interval, mark, dec.mark
+  )
 }
 
-tplDate = function(cols, method, ...) {
-  sprintf("DTWidget.formatDate(this, row, data, %d, '%s')", cols, method);
+tplDate = function(cols, method, params, ...) {
+  params = if (length(params) > 0) paste(',', toJSON(params)) else ''
+  sprintf("DTWidget.formatDate(this, row, data, %d, '%s'%s);", cols, method, params)
 }
 
 DateMethods = c(
@@ -200,11 +220,11 @@ tplStyle = function(cols, valueCols, target, styles, ...) {
   switch(
     target,
     cell = sprintf(
-      "var value=data[%s]; if (value!==null) $(this.api().cell(row, %s).node()).css({%s});",
+      "var value=data[%s]; $(this.api().cell(row, %s).node()).css({%s});",
       valueCols, cols, css
     ),
     row = sprintf(
-      "var value=data[%s]; if (value!==null) $(row).css({%s});",
+      "var value=data[%s]; $(row).css({%s});",
       valueCols, css
     ),
     stop('Invalid target!')
@@ -245,7 +265,7 @@ styleInterval = function(cuts, values) {
   values = sprintf("'%s'", values)
   if (n == 0) return(values)
   if (!all(cuts == sort(cuts))) stop("'cuts' must be sorted increasingly")
-  js = ''
+  js = "isNaN(parseFloat(value)) ? '' : "  # missing or non-numeric values in data
   for (i in seq_len(n)) {
     js = paste0(js, sprintf('value <= %s ? %s : ', cuts[i], values[i]))
   }
@@ -261,9 +281,13 @@ styleEqual = function(levels, values) {
   if (n != length(values))
     stop("length(levels) must be equal to length(values)")
   if (n == 0) return("''")
+  levels2 = levels
+  if (is.character(levels)) levels2 = gsub("'", "\\'", levels)
+  levels2 = sprintf("'%s'", levels2)
+  levels2[is.na(levels)] = 'null'
   js = ''
   for (i in seq_len(n)) {
-    js = paste0(js, sprintf("value == '%s' ? '%s' : ", levels[i], values[i]))
+    js = paste0(js, sprintf("value == %s ? '%s' : ", levels2[i], values[i]))
   }
   JS(paste0(js, "''"))
 }
