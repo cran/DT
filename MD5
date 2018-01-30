@@ -1,7 +1,7 @@
-9c21f294d2e3b3f225c87c49f82d1eec *DESCRIPTION
+7452c27ed640a36c133212594908e31a *DESCRIPTION
 4f067e6ecc298741e67bfcf099364593 *LICENSE
 467d95877dfae18df1623c253b98029c *NAMESPACE
-830893e2a393b090802785ff9dd1695b *NEWS.md
+f8750f476cf8bcea0431c0cf73f55353 *NEWS.md
 3f5eb8844c5ddccec8b75911f179fbe3 *R/datatables.R
 ea514de2cece2a6ca45e58cdfe06cad3 *R/format.R
 630f2599bac4350e9ff5d4c2ad69ef6d *R/package.R
@@ -10,7 +10,7 @@ c094a77b1e87021ea2f70440c9d68eb0 *R/utils.R
 92156f44b4e59e48da7944878d303e0e *README.md
 85894fadf72b3071d704e7ea7f1b0aab *build/vignette.rds
 97220bb90a6566c9691c4f5bc1bb8c05 *inst/doc/DT.Rmd
-0c93c36847e6e666d68ca9e87084253d *inst/doc/DT.html
+31376d4378e664554c51eb7626e9350e *inst/doc/DT.html
 71abd2a48dfda62caf5aefd1cfbc7010 *inst/examples/DT-click/DESCRIPTION
 565bad45b8c6aaf40ac55af94202b66b *inst/examples/DT-click/Readme.md
 d4800258fcd978916f24ca62ba637607 *inst/examples/DT-click/rsconnect/shinyapps.io/yihui/DT-click.dcf
@@ -61,7 +61,7 @@ b45bee37de59858ac17cb854ae8b4b93 *inst/examples/DT-selection/DESCRIPTION
 494610fe3e185694e51f5f1c5c30da84 *inst/examples/ajax-shiny.R
 25c4baab4bb7785952879618ee15cde5 *inst/examples/datatable.R
 e55b84d0dd7949c07094d1d6079b16b8 *inst/htmlwidgets/css/datatables-crosstalk.css
-20eaf8821dde805b466f450d18a04c06 *inst/htmlwidgets/datatables.js
+9207c4ee5f5d58a6632a0a5d22c3c732 *inst/htmlwidgets/datatables.js
 4172daeb4c203c23b0966e40e59f6386 *inst/htmlwidgets/datatables.yaml
 7fb384e3400528342d9c0f2e36343608 *inst/htmlwidgets/lib/datatables-extensions/AutoFill/css/autoFill.bootstrap.min.css
 e365bdd06a615171ce0c01207d5743aa *inst/htmlwidgets/lib/datatables-extensions/AutoFill/css/autoFill.bootstrap4.min.css
