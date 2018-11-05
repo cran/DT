@@ -55,13 +55,20 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
 
   # TODO: this can be simplified after this htmlwidgets PR is merged
   # https://github.com/ramnathv/htmlwidgets/pull/122
-  currentSession = NULL
-  currentOutputName = NULL
+  outputNameEnv = new.env(parent = emptyenv())
+  outputNameEnv[["outputName"]] = NULL
 
   exprFunc = shiny::exprToFunction(expr, env, quoted = TRUE)
   widgetFunc = function() {
     opts = options(DT.datatable.shiny = TRUE); on.exit(options(opts), add = TRUE)
     instance = exprFunc()
+    if (promises::is.promising(instance)) {
+      promises::then(instance, processWidget)
+    } else {
+      processWidget(instance)
+    }
+  }
+  processWidget = function(instance) {
     if (!all(c('datatables', 'htmlwidget') %in% class(instance))) {
       instance = datatable(instance, ...)
     } else if (length(list(...)) != 0) {
@@ -87,7 +94,7 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
       }
 
       if (is.null(options[['ajax']][['url']])) {
-        url = sessionDataURL(currentSession, origData, currentOutputName, dataTablesFilter)
+        url = sessionDataURL(shiny::getDefaultReactiveDomain(), origData, outputNameEnv[["outputName"]], dataTablesFilter)
         options$ajax$url = url
       }
       instance$x$options = fixServerOptions(options)
@@ -101,14 +108,9 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
   )
 
   func = shiny::markRenderFunction(dataTableOutput, function(shinysession, name, ...) {
-    currentSession <<- shinysession
-    currentOutputName <<- name
-    on.exit({
-      currentSession <<- NULL
-      currentOutputName <<- NULL
-    }, add = TRUE)
+    domain = tempVarsPromiseDomain(outputNameEnv, outputName = name)
 
-    renderFunc()
+    promises::with_promise_domain(domain, renderFunc())
   })
 
   # This snapshotPreprocessOutput function was added in shiny 1.0.3.9002
@@ -127,6 +129,63 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
 #' @export
 #' @rdname dataTableOutput
 renderDT = renderDataTable
+
+getAll = function(x, env) {
+  as.list(mget(x, env, ifnotfound = rep(list(NULL), times = length(x))))
+}
+
+setAll = function(lst, env) {
+  mapply(names(lst), lst, FUN = function(name, val) {
+    assign(name, val, env)
+  })
+  invisible()
+}
+
+# This promise domain is needed to set/unset temporary variables in
+# a specific environment anytime a promise handler is invoked in the
+# domain. This is used to pass the Shiny output name from where we
+# know it (in the function(shinysession, name, ...) {...}) to where
+# we don't know it, but need it (processWidget).
+tempVarsPromiseDomain = function(env, ...) {
+  force(env)
+  vars = list(...)
+
+  promises::new_promise_domain(
+    wrapOnFulfilled = function(onFulfilled) {
+      # force(onFulfilled)
+      function(...) {
+        old = getAll(names(vars), env)
+        setAll(vars, env)
+        on.exit({
+          setAll(old, env)
+        }, add = TRUE)
+
+        onFulfilled(...)
+      }
+    },
+    wrapOnRejected = function(onRejected) {
+      # force(onRejected)
+      function(...) {
+        old = getAll(names(vars), env)
+        setAll(vars, env)
+        on.exit({
+          setAll(old, env)
+        }, add = TRUE)
+
+        onRejected(...)
+      }
+    },
+    wrapSync = function(expr) {
+      old = getAll(names(vars), env)
+      setAll(vars, env)
+      on.exit({
+        setAll(old, env)
+      }, add = TRUE)
+
+      force(expr)
+    }
+  )
+}
 
 #' Manipulate an existing DataTables instance in a Shiny app
 #'
@@ -167,13 +226,13 @@ dataTableProxy = function(
 #' @rdname proxy
 #' @export
 selectRows = function(proxy, selected) {
-  invokeRemote(proxy, 'selectRows', list(I_null(selected)))
+  invokeRemote(proxy, 'selectRows', list(I_null(as.integer(selected))))
 }
 
 #' @rdname proxy
 #' @export
 selectColumns = function(proxy, selected) {
-  invokeRemote(proxy, 'selectColumns', list(I_null(selected)))
+  invokeRemote(proxy, 'selectColumns', list(I_null(as.integer(selected))))
 }
 
 I_null = function(x) if (is.null(x)) list() else x
@@ -249,6 +308,36 @@ updateSearch = function(proxy, keywords = list(global = NULL, columns = NULL)) {
   }
   invokeRemote(proxy, 'updateSearch', list(keywords))
 }
+
+#' @param show a vector of column positions to show (the indexing starts at
+#' 0, but if row.names are visible, they are the first column).
+#' @rdname proxy
+#' @export
+showCols = function(proxy, show, reset = FALSE) {
+  invokeRemote(proxy, 'showCols', list(show, reset))
+}
+
+#' @param hide a vector of column positions to hide
+#' @param reset if \code{TRUE}, will only show/hide the columns indicated.
+#' @rdname proxy
+#' @export
+hideCols = function(proxy, hide, reset = FALSE) {
+  invokeRemote(proxy, 'hideCols', list(hide, reset))
+}
+
+#' @param order A numeric vector of column positions, starting from 0, and including
+#' the row.names as a column, if they are include. Must contain a value
+#' for all columns, regardless of whether they are visible or not. Also for
+#' column reordering to work, the datatable must have extension 'ColReorder'
+#' set as well as option 'colReordoer' set to TRUE).
+#' @param origOrder Whether column reordering should be relative to the original
+#' order (the default is to compare to current order)
+#' @rdname proxy
+#' @export
+colReorder = function(proxy, order, origOrder = FALSE) {
+  invokeRemote(proxy, 'colReorder', list(order, origOrder))
+}
+
 
 #' @param resetPaging whether to reset the paging position
 #' @param clearSelection which existing selections to clear: it can be any
@@ -379,7 +468,10 @@ sessionDataURL = function(session, data, id, filter) {
     res = tryCatch(filter(data, params), error = function(e) {
       list(error = as.character(e))
     })
-    httpResponse(200, 'application/json', enc2utf8(toJSON(res, dataframe = 'rows')))
+
+    jsonArgs = c(list(x = res, dataframe = 'rows'),
+                 getOption('DT.TOJSON_ARGS', getOption('htmlwidgets.TOJSON_ARGS')))
+    httpResponse(200, 'application/json', enc2utf8(do.call(toJSON, jsonArgs)))
   }
 
   session$registerDataObj(id, data, filterFun)
@@ -435,9 +527,9 @@ dataTablesFilter = function(data, params) {
     ij = if (is.numeric(dj) || is.Date(dj)) {
       which(filterRange(dj, k))
     } else if (is.factor(dj)) {
-      which(dj %in% jsonlite::fromJSON(k))
+      which(dj %in% fromJSON(k))
     } else if (is.logical(dj)) {
-      which(dj %in% as.logical(jsonlite::fromJSON(k)))
+      which(dj %in% as.logical(fromJSON(k)))
     } else {
       grep2(k, as.character(dj), fixed = col[['search']][['regex']] == 'false',
             ignore.case = ci)
@@ -552,7 +644,7 @@ cleanDataFrame = function(x) {
     xj = unname(xj)  # remove names
     dim(xj) = NULL  # drop dimensions
     if (is.table(xj)) xj = c(xj)  # drop the table class
-    x[, j] = xj
+    x[[j]] = xj
   }
   unname(x)
 }

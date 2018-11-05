@@ -103,6 +103,21 @@ formatSignif = function(
 #'   \code{params = list('ko-KR', list(year = 'numeric', month = 'long', day =
 #'   'numeric'))}
 formatDate = function(table, columns, method = 'toDateString', params = NULL) {
+  x = table$x
+  if (x$filter != 'none') {
+    if (inherits(columns, 'formula')) columns = all.vars(columns)
+    colnames = base::attr(x, 'colnames', exact = TRUE)
+    rownames = base::attr(x, 'rownames', exact = TRUE)
+    if (is.null(params)) params = list()
+    cols = sprintf("%d", name2int(columns, colnames, rownames))
+    x$filterDateFmt = as.list(x$filterDateFmt)
+    for (col in cols) x$filterDateFmt[[col]] = list(
+      method = method, params = toJSON(params)
+    )
+    table$x = x
+  }
+  # the code above is used to ensure the date(time) filter displays the same format or
+  # timezone as the column value
   formatColumns(table, columns, tplDate, method, params)
 }
 
@@ -158,7 +173,7 @@ appendFormatter = function(js, name, names, rownames = TRUE, template, ...) {
   }
   i = name2int(name, names, rownames)
   JS(append(
-    js, after = 1,
+    js, after = length(js) - 1,
     template(i, ..., names, rownames)
   ))
 }
@@ -231,6 +246,19 @@ tplStyle = function(cols, valueCols, target, styles, ...) {
   )
 }
 
+jsValues = function(x) {
+  if (inherits(x, c("POSIXt", "POSIXct", "POSIXlt"))) {
+    sprintf("'%s'", format(x, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"))
+  } else if (inherits(x, "Date")) {
+    sprintf("'%s'", format(x, "%Y-%m-%d"))
+  } else if (is.numeric(x)) {
+    sprintf("%f", x)
+  } else {
+    x
+  }
+}
+
+
 #' Conditional CSS styles
 #'
 #' A few helper functions for the \code{\link{formatStyle}()} function to
@@ -267,29 +295,32 @@ styleInterval = function(cuts, values) {
   if (!all(cuts == sort(cuts))) stop("'cuts' must be sorted increasingly")
   js = "isNaN(parseFloat(value)) ? '' : "  # missing or non-numeric values in data
   for (i in seq_len(n)) {
-    js = paste0(js, sprintf('value <= %s ? %s : ', cuts[i], values[i]))
+    js = paste0(js, sprintf('value <= %s ? %s : ', jsValues(cuts[i]), values[i]))
   }
   JS(paste0(js, values[n + 1]))
 }
 
 #' @param levels a character vector of data values to be mapped (one-to-one) to
 #'   CSS values
+#' @param default a string used as the the default CSS value for values other than levels
 #' @export
 #' @rdname styleInterval
-styleEqual = function(levels, values) {
+styleEqual = function(levels, values, default = "") {
   n = length(levels)
   if (n != length(values))
     stop("length(levels) must be equal to length(values)")
+  if (!is.character(default) || length(default) != 1)
+    stop("default must be a string")
   if (n == 0) return("''")
   levels2 = levels
   if (is.character(levels)) levels2 = gsub("'", "\\'", levels)
-  levels2 = sprintf("'%s'", levels2)
+  levels2 = if (is.Date(levels2) || is.numeric(levels2)) jsValues(levels2) else sprintf("'%s'", levels2)
   levels2[is.na(levels)] = 'null'
   js = ''
   for (i in seq_len(n)) {
     js = paste0(js, sprintf("value == %s ? '%s' : ", levels2[i], values[i]))
   }
-  JS(paste0(js, "''"))
+  JS(paste0(js, sprintf("'%s'", default)))
 }
 
 #' @param data a numeric vector whose range will be used for scaling the
@@ -307,7 +338,7 @@ styleColorBar = function(data, color, angle=90) {
   rg = range(data, na.rm = TRUE, finite = TRUE)
   r1 = rg[1]; r2 = rg[2]; r = r2 - r1
   JS(sprintf(
-    "isNaN(parseFloat(value)) || value <= %s ? '' : 'linear-gradient(%sdeg, transparent ' + (%s - value)/%s * 100 + '%%, %s ' + (%s - value)/%s * 100 + '%%)'",
+    "isNaN(parseFloat(value)) || value <= %f ? '' : 'linear-gradient(%fdeg, transparent ' + (%f - value)/%f * 100 + '%%, %s ' + (%f - value)/%f * 100 + '%%)'",
     r1, angle, r2, r, color, r2, r
   ))
 }

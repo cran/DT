@@ -65,7 +65,8 @@
 #' @param extensions a character vector of the names of the DataTables
 #'   extensions (\url{https://datatables.net/extensions/index})
 #' @param plugins a character vector of the names of DataTables plug-ins
-#'   (\url{https://rstudio.github.io/DT/plugins.html})
+#'   (\url{https://rstudio.github.io/DT/plugins.html}).  Note that only those
+#'   plugins supported by the \code{DT} package can be used here.
 #' @param editable \code{TRUE} to enable table editor.
 #' @note You are recommended to escape the table content for security reasons
 #'   (e.g. XSS attacks) when using this function in Shiny or any other dynamic
@@ -92,6 +93,7 @@ datatable = function(
     if (is.function(options)) options() else options
   )
   params = list()
+  attr(params, "TOJSON_ARGS") = getOption("DT.TOJSON_ARGS")
 
   if (crosstalk::is.SharedData(data)) {
     params$crosstalkOptions = list(key = data$key(), group = data$groupName())
@@ -132,7 +134,7 @@ datatable = function(
   if (length(numc)) {
     # if the `className` of the column has already been defined by the user,
     # we should not touch it
-    undefined_numc = setdiff(numc - 1, classNameDefinedColumns(options))
+    undefined_numc = setdiff(numc - 1, classNameDefinedColumns(options, ncol(data)))
     if (length(undefined_numc)) options = appendColumnDefs(
       options, list(className = 'dt-right', targets = undefined_numc)
     )
@@ -286,12 +288,21 @@ appendColumnDefs = function(options, def) {
   options
 }
 
-classNameDefinedColumns = function(options) {
+classNameDefinedColumns = function(options, ncol) {
   defs = options[['columnDefs']]
   cols = integer()
   for (def in defs) {
-    if (!is.null(def[['className']]) && is.numeric(col <- def[['targets']]))
-      cols = c(cols, col)
+    if (!is.null(def[['className']])) {
+      col = def[['targets']]
+      if (is.numeric(col)) {
+        col[col < 0] = col[col < 0] + ncol
+      } else if ("_all" %in% col) {
+        col = seq_len(ncol) - 1
+      } else {
+        col = integer()
+      }
+    }
+    cols = c(cols, col)
   }
   unique(cols)
 }
@@ -604,6 +615,10 @@ DT2BSClass = function(class) {
 
 pluginDependency = function(plugin) {
   d = depPath('datatables-plugins', plugin)
+  if (!dir.exists(d)) warning(
+    "Could not find plugin '", plugin, "'.  ',
+    'See https://rstudio.github.io/DT/plugins.html for a list of supported plugins."
+  )
   htmlDependency(
     paste0('dt-plugin-', tolower(plugin)), DataTablesVersion, src = d,
     script = list.files(d, '[.]js$'), stylesheet = list.files(d, '[.]css$')
