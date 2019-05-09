@@ -47,16 +47,34 @@ DTOutput = dataTableOutput
 #'   \code{FALSE}, then the entire data frame is sent to the browser at once.
 #'   Highly recommended for medium to large data frames, which can cause
 #'   browsers to slow down or crash.
+#' @param funcFilter (for expert use only) passed to the \code{filter} argument
+#'   of \code{\link{dataTableAjax}()}
 #' @param ... ignored when \code{expr} returns a table widget, and passed as
 #'   additional arguments to \code{datatable()} when \code{expr} returns a data
 #'   object
-renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = FALSE, ...) {
+renderDataTable = function(
+    expr, server = TRUE, env = parent.frame(), quoted = FALSE,
+    funcFilter = dataTablesFilter, ...
+  ) {
   if (!quoted) expr = substitute(expr)
 
   # TODO: this can be simplified after this htmlwidgets PR is merged
   # https://github.com/ramnathv/htmlwidgets/pull/122
-  outputNameEnv = new.env(parent = emptyenv())
-  outputNameEnv[["outputName"]] = NULL
+  outputInfoEnv = new.env(parent = emptyenv())
+  outputInfoEnv[["outputName"]] = NULL
+  # jcheng 2018-12-17:
+  # It's important to save the session, not just the outputName. It turns
+  # out that if the datatable is defined in a module, the outputName is
+  # the fully qualified name, and session is the top-level session (that
+  # is, the outputName and session that is passed to the render function).
+  # That's a fine combination, or alternatively it'd be fine if the name
+  # was unqualified and the session was module-specific. But during my
+  # commit to add async support, I broke this pairing, and used the (fully
+  # qualified) outputName from the render function, and the session from
+  # getDefaultReactiveDomain() (which is module specific), and this combo
+  # is no good--you end up with the module prefix included twice in the
+  # ajax URL. See issue #626 for the repro.
+  outputInfoEnv[["session"]] = NULL
 
   exprFunc = shiny::exprToFunction(expr, env, quoted = TRUE)
   widgetFunc = function() {
@@ -94,7 +112,7 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
       }
 
       if (is.null(options[['ajax']][['url']])) {
-        url = sessionDataURL(shiny::getDefaultReactiveDomain(), origData, outputNameEnv[["outputName"]], dataTablesFilter)
+        url = sessionDataURL(outputInfoEnv[["session"]], origData, outputInfoEnv[["outputName"]], funcFilter)
         options$ajax$url = url
       }
       instance$x$options = fixServerOptions(options)
@@ -108,7 +126,7 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
   )
 
   func = shiny::markRenderFunction(dataTableOutput, function(shinysession, name, ...) {
-    domain = tempVarsPromiseDomain(outputNameEnv, outputName = name)
+    domain = tempVarsPromiseDomain(outputInfoEnv, outputName = name, session = shinysession)
 
     promises::with_promise_domain(domain, renderFunc())
   })
@@ -122,6 +140,12 @@ renderDataTable = function(expr, server = TRUE, env = parent.frame(), quoted = F
       gsub('"ajax"\\s*:\\s*\\{\\s*"url"\\s*:\\s*"[^"]*"\\s*,?', '"ajax":{', value)
     })
   }
+
+  shiny::registerInputHandler('DT.cellInfo', function(val, ...) {
+    opts = options(stringsAsFactors = FALSE); on.exit(options(opts), add = TRUE)
+    val = lapply(val, as.data.frame)
+    do.call(rbind, val)
+  }, TRUE)
 
   func
 }
@@ -189,7 +213,7 @@ tempVarsPromiseDomain = function(env, ...) {
 
 #' Manipulate an existing DataTables instance in a Shiny app
 #'
-#' The function \code{datatableProxy()} creates a proxy object that can be used
+#' The function \code{dataTableProxy()} creates a proxy object that can be used
 #' to manipulate an existing DataTables instance in a Shiny app, e.g. select
 #' rows/columns, or add rows.
 #' @param outputId the id of the table to be manipulated (the same id as the one
@@ -211,12 +235,12 @@ dataTableProxy = function(
   outputId, session = shiny::getDefaultReactiveDomain(), deferUntilFlush = TRUE
 ) {
   if (is.null(session))
-    stop('datatableProxy() must be called from the server function of a Shiny app')
+    stop('dataTableProxy() must be called from the server function of a Shiny app')
 
   structure(list(
     id = session$ns(outputId), rawId = outputId, session = session,
     deferUntilFlush = deferUntilFlush
-  ), class = 'datatableProxy')
+  ), class = 'dataTableProxy')
 }
 
 #' @param proxy a proxy object returned by \code{dataTableProxy()}
@@ -380,7 +404,7 @@ replaceData = function(proxy, data, ..., resetPaging = TRUE, clearSelection = 'a
 }
 
 invokeRemote = function(proxy, method, args = list()) {
-  if (!inherits(proxy, 'datatableProxy'))
+  if (!inherits(proxy, 'dataTableProxy'))
     stop('Invalid proxy argument; table proxy object was expected')
 
   msg = list(id = proxy$id, call = list(method = method, args = args))
@@ -456,13 +480,6 @@ sessionDataURL = function(session, data, id, filter) {
     # DataTables requests were sent via POST
     params = URLdecode(rawToChar(req$rook.input$read()))
     Encoding(params) = 'UTF-8'
-    # use system native encoding if possible (again, this grep(fixed = TRUE) bug
-    # https://bugs.r-project.org/bugzilla3/show_bug.cgi?id=16264)
-    params2 = iconv(params, 'UTF-8', '')
-    if (!is.na(params2)) params = params2 else warning(
-      'Some DataTables parameters contain multibyte characters ',
-      'that do not work in current locale.'
-    )
     params = shiny::parseQueryString(params, nested = TRUE)
 
     res = tryCatch(filter(data, params), error = function(e) {

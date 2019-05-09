@@ -96,7 +96,16 @@ extensions (\url{https://datatables.net/extensions/index})}
 (\url{https://rstudio.github.io/DT/plugins.html}).  Note that only those
 plugins supported by the \code{DT} package can be used here.}
 
-\item{editable}{\code{TRUE} to enable table editor.}
+\item{editable}{\code{FALSE} to disable the table editor, or \code{TRUE} (or
+\code{"cell"}) to enable editing a single cell. Alternatively, you can set
+it to \code{"row"} to be able to edit a row, or \code{"column"} to edit a
+column, or \code{"all"} to edit all cells on the current page of the table.
+In all modes, start editing by doubleclicking on a cell. This argument can
+also be a list of the form \code{list(target = TARGET, disable =
+list(columns = INDICES))}, where \code{TARGET} can be \code{cell},
+\code{row}, \code{column}, or \code{all}, and \code{INDICES} is an integer
+vector of column indices. Use the list form if you want to disable editing
+certain columns.}
 }
 \description{
 This function creates an HTML widget to display rectangular data (a matrix or
@@ -134,5 +143,6 @@ datatable(data.frame(x = Sys.Date()))
 datatable(data.frame(x = Sys.time()))
 }
 \references{
-See \url{https://rstudio.github.io/DT} for the full documentation.
+See \url{https://rstudio.github.io/DT} for the full
+  documentation.
 }
