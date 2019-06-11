@@ -1,4 +1,4 @@
-1adc9f2068ee09061add5cb8c0be9c6e *DESCRIPTION
+284232c6a862d46d34906589298de198 *DESCRIPTION
 8f8e30ddcfbdb0d31e9a4fa3cea22f5d *LICENSE
 4fa7b72bc077e7e2e8c6f176b65f79d2 *NAMESPACE
 85da160525b279b2237550d53187aa6d *R/datatables.R
@@ -10,7 +10,7 @@
 a50076586357276e4aa6eecb21bbbd93 *build/vignette.rds
 18dfd85ea2a9a49d2d1851db97154ad9 *inst/NEWS.Rd
 97220bb90a6566c9691c4f5bc1bb8c05 *inst/doc/DT.Rmd
-252b18a38d1fe25a4c6ca375952572c5 *inst/doc/DT.html
+ab714f778e740432d9a453443bb05538 *inst/doc/DT.html
 71abd2a48dfda62caf5aefd1cfbc7010 *inst/examples/DT-click/DESCRIPTION
 565bad45b8c6aaf40ac55af94202b66b *inst/examples/DT-click/Readme.md
 d4800258fcd978916f24ca62ba637607 *inst/examples/DT-click/rsconnect/shinyapps.io/yihui/DT-click.dcf
@@ -20,7 +20,7 @@ e48bcd1350e4ae1e5642300e211164cb *inst/examples/DT-crosstalk/plotly-persist.R
 16204ab837655d6e26b37738864d3a44 *inst/examples/DT-edit/DESCRIPTION
 48b0a944d9f91abe1f4fb754ecfe5c3f *inst/examples/DT-edit/Readme.md
 c7f6d2fd3c792c5b302022ed96e1e431 *inst/examples/DT-edit/app.R
-e863580ca33d16208d54fffa2be10d2b *inst/examples/DT-edit/rsconnect/shinyapps.io/yihui/DT-edit.dcf
+cb1583a8b06b213c978c561f0884a167 *inst/examples/DT-edit/rsconnect/shinyapps.io/yihui/DT-edit.dcf
 bc3b531b3c774fd638f172ecbdf9187f *inst/examples/DT-filter/DESCRIPTION
 f3526b9a6db174af24a13552072db152 *inst/examples/DT-filter/Readme.md
 dcefb9d39dd5db650c19765dc063c1f4 *inst/examples/DT-filter/rsconnect/shinyapps.io/yihui/DT-filter.dcf
@@ -62,7 +62,7 @@ b45bee37de59858ac17cb854ae8b4b93 *inst/examples/DT-selection/DESCRIPTION
 494610fe3e185694e51f5f1c5c30da84 *inst/examples/ajax-shiny.R
 25c4baab4bb7785952879618ee15cde5 *inst/examples/datatable.R
 e55b84d0dd7949c07094d1d6079b16b8 *inst/htmlwidgets/css/datatables-crosstalk.css
-4c78f70ca68cab49389c0e40df23e306 *inst/htmlwidgets/datatables.js
+554c8799a5ebaa672618dbef59124424 *inst/htmlwidgets/datatables.js
 4172daeb4c203c23b0966e40e59f6386 *inst/htmlwidgets/datatables.yaml
 7fb384e3400528342d9c0f2e36343608 *inst/htmlwidgets/lib/datatables-extensions/AutoFill/css/autoFill.bootstrap.min.css
 e365bdd06a615171ce0c01207d5743aa *inst/htmlwidgets/lib/datatables-extensions/AutoFill/css/autoFill.bootstrap4.min.css
