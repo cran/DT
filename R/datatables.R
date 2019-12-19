@@ -47,7 +47,10 @@
 #'   the first column to display, you should add the numeric column indices
 #'   by one when using \code{rownames}
 #' @param style the style name (\url{http://datatables.net/manual/styling/});
-#'   currently only \code{'default'} and \code{'bootstrap'} are supported
+#'   currently only \code{'default'}, \code{'bootstrap'}, and
+#'   \code{'bootstrap4'} are supported. Note that DT doesn't contain the theme
+#'   files so in order to display the style correctly, you have to link
+#'   the necessary files in the header.
 #' @param width,height Width/Height in pixels (optional, defaults to automatic
 #'   sizing)
 #' @param elementId An id for the widget (a random string by default).
@@ -68,7 +71,8 @@
 #'   extensions (\url{https://datatables.net/extensions/index})
 #' @param plugins a character vector of the names of DataTables plug-ins
 #'   (\url{https://rstudio.github.io/DT/plugins.html}).  Note that only those
-#'   plugins supported by the \code{DT} package can be used here.
+#'   plugins supported by the \code{DT} package can be used here. You can see
+#'   the available plugins by calling \code{DT:::available_plugins()}
 #' @param editable \code{FALSE} to disable the table editor, or \code{TRUE} (or
 #'   \code{"cell"}) to enable editing a single cell. Alternatively, you can set
 #'   it to \code{"row"} to be able to edit a row, or \code{"column"} to edit a
@@ -183,7 +187,7 @@ datatable = function(
     options = appendColumnDefs(options, list(orderable = FALSE, targets = 0))
 
   style = match.arg(tolower(style), DTStyles())
-  if (style == 'bootstrap') class = DT2BSClass(class)
+  if (grepl('^bootstrap', style)) class = DT2BSClass(class)
   if (style != 'default') params$style = style
 
   # add class for fillContainer if necessary
@@ -463,7 +467,7 @@ filterRow = function(
         d = c('true', 'false', if (any(is.na(d))) 'na')
       } else {
         t = 'factor'
-        d = sort(unique(d))
+        d = levels(d)
       }
       if (t != 'disabled') tags$div(
         tags$select(
@@ -634,12 +638,29 @@ DT2BSClass = function(class) {
   paste(class, collapse = ' ')
 }
 
-pluginDependency = function(plugin) {
-  d = depPath('datatables-plugins', plugin)
-  if (!dir.exists(d)) warning(
-    "Could not find plugin '", plugin, "'.  ',
-    'See https://rstudio.github.io/DT/plugins.html for a list of supported plugins."
+# all the plugins' js/css files should be place under datatables-plugins/group/plugin
+# the name is the path of the plugins relative to depPath('datatables-plugins')
+available_plugins = function() {
+  plugin_path = depPath('datatables-plugins')
+  groups = list.dirs(plugin_path, full.names = FALSE, recursive = FALSE)
+  plugins = lapply(
+    groups,
+    function(g) {
+      out = list.dirs(file.path(plugin_path, g), full.names = FALSE, recursive = FALSE)
+      setNames(out, file.path(g, out))
+    }
   )
+  unlist(plugins)
+}
+
+pluginDependency = function(plugin) {
+  plugins = available_plugins()
+  if (!plugin %in% plugins) stop(
+    "Could not find plugin '", plugin, "'.  '",
+    'Only the following plugins are supported by DT: ',
+    paste0(plugins, collapse = ', ')
+  )
+  d = depPath('datatables-plugins', names(plugins)[plugins == plugin])
   htmlDependency(
     paste0('dt-plugin-', tolower(plugin)), DataTablesVersion, src = d,
     script = list.files(d, '[.]js$'), stylesheet = list.files(d, '[.]css$')
