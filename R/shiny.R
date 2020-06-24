@@ -77,7 +77,7 @@ renderDataTable = function(
   outputInfoEnv[["session"]] = NULL
 
   exprFunc = shiny::exprToFunction(expr, env, quoted = TRUE)
-  argFunc = shiny::exprToFunction(list(...), env, quoted = FALSE)
+  argFunc = shiny::exprToFunction(list(..., server = server), env, quoted = FALSE)
   widgetFunc = function() {
     opts = options(DT.datatable.shiny = TRUE); on.exit(options(opts), add = TRUE)
     instance = exprFunc()
@@ -88,9 +88,13 @@ renderDataTable = function(
     }
   }
   processWidget = function(instance) {
+    args = argFunc()
+    server = args$server; args$server = NULL # the last element is `server`
+    # which is only used in `renderDT()` not `datatable()`, the reason
+    # of having it in `argFunc()` is we want `server` to be reactive
     if (!all(c('datatables', 'htmlwidget') %in% class(instance))) {
-      instance = do.call(datatable, c(list(instance), argFunc()))
-    } else if (length(argFunc()) != 0) {
+      instance = do.call(datatable, c(list(instance), args))
+    } else if (length(args) != 0) {
       warning("renderDataTable ignores ... arguments when expr yields a datatable object; see ?renderDataTable")
     }
 
@@ -263,24 +267,37 @@ dataTableProxy = function(
 #' @param selected an integer vector of row/column indices, or a matrix of two
 #'   columns (row and column indices, respectively) for cell indices; you may
 #'   use \code{NULL} to clear existing selections
+#' @param ignore.selectable when \code{FALSE} (the default), the "non-selectable"
+#'   range specified by \code{selection = list(selectable= )} is respected, i.e.,
+#'   you can't select "non-selectable" range. Otherwise, it is ignored.
+#'
 #' @rdname proxy
 #' @export
-selectRows = function(proxy, selected) {
-  invokeRemote(proxy, 'selectRows', list(I_null(as.integer(selected))))
+selectRows = function(proxy, selected, ignore.selectable = FALSE) {
+  invokeRemote(
+    proxy, 'selectRows',
+    list(I_null(as.integer(selected)), ignore.selectable)
+  )
 }
 
 #' @rdname proxy
 #' @export
-selectColumns = function(proxy, selected) {
-  invokeRemote(proxy, 'selectColumns', list(I_null(as.integer(selected))))
+selectColumns = function(proxy, selected, ignore.selectable = FALSE) {
+  invokeRemote(
+    proxy, 'selectColumns',
+    list(I_null(as.integer(selected)), ignore.selectable)
+  )
 }
 
 I_null = function(x) if (is.null(x)) list() else x
 
 #' @rdname proxy
 #' @export
-selectCells = function(proxy, selected) {
-  invokeRemote(proxy, 'selectCells', list(selected))
+selectCells = function(proxy, selected, ignore.selectable = FALSE) {
+  invokeRemote(
+    proxy, 'selectCells',
+    list(selected, ignore.selectable)
+  )
 }
 
 #' @param data a single row of data to be added to the table; it can be a matrix

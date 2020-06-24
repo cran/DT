@@ -1,4 +1,6 @@
 formatColumns = function(table, columns, template, ..., appendTo = c('columnDefs', 'rowCallback')) {
+  if (!inherits(table, 'datatables'))
+    stop("Invalid table argument; a table object created from datatable() was expected")
   if (inherits(columns, 'formula')) columns = all.vars(columns)
   x = table$x
   colnames = base::attr(x, 'colnames', exact = TRUE)
@@ -39,6 +41,8 @@ formatColumns = function(table, columns, template, ..., appendTo = c('columnDefs
 #' @param before whether to place the currency symbol before or after the values
 #' @references See \url{https://rstudio.github.io/DT/functions.html} for detailed
 #'   documentation and examples.
+#' @note The length of arguments other than \code{table} should be 1 or the same as
+#'   the length of \code{columns}.
 #' @export
 #' @examples # !formatR
 #' library(DT)
@@ -114,6 +118,8 @@ formatSignif = function(
 #'   \code{params = list('ko-KR', list(year = 'numeric', month = 'long', day =
 #'   'numeric'))}
 formatDate = function(table, columns, method = 'toDateString', params = NULL) {
+  if (!inherits(table, 'datatables'))
+    stop("Invalid table argument; a table object created from datatable() was expected")
   x = table$x
   if (x$filter != 'none') {
     if (inherits(columns, 'formula')) columns = all.vars(columns)
@@ -185,7 +191,7 @@ name2int = function(name, names, rownames, noerror = FALSE) {
 colFormatter = function(name, names, rownames = TRUE, template, ...) {
   i = name2int(name, names, rownames)
   js = sprintf("function(data, type, row, meta) { return %s }", template(...))
-  list(list(targets = i, render = JS(js)))
+  Map(function(i, js) list(targets = i, render = JS(js)), i, js)
 }
 
 appendFormatter = function(js, name, names, rownames = TRUE, template, ...) {
@@ -305,6 +311,9 @@ jsValues = function(x) {
 #' The function \code{styleColorBar()} can be used to draw background color bars
 #' behind table cells in a column, and the width of bars is proportional to the
 #' column values.
+#'
+#' The function \code{styleValue()} uses the column value as the CSS values.
+#'
 #' @param cuts a vector of cut points (sorted increasingly)
 #' @param values a vector of CSS values
 #' @export
@@ -347,8 +356,17 @@ styleEqual = function(levels, values, default = NULL) {
   for (i in seq_len(n)) {
     js = paste0(js, sprintf("value == %s ? %s : ", levels[i], values[i]))
   }
-  default = if (is.null(default)) 'value' else jsValues(default)
+  # set the css to null will leave the attribute as it is. Despite it's not
+  # documented explicitly but the jquery test covers this behavior
+  # https://github.com/jquery/jquery/commit/2ae872c594790c4b935a1d7eabdf8b8212fd3c3f
+  default = if (is.null(default)) 'null' else jsValues(default)
   JS(paste0(js, default))
+}
+
+#' @export
+#' @rdname styleInterval
+styleValue = function() {
+  JS('value')
 }
 
 #' @param data a numeric vector whose range will be used for scaling the
