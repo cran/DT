@@ -135,3 +135,11 @@ editData = function(data, info, proxy = NULL, rownames = TRUE, resetPaging = FAL
   }
   data
 }
+
+
+# TODO: remove this hack in the future
+# is R CMD check running on a package that has a version lower or equal to `version`?
+check_old_package = function(name, version) {
+  if (is.na(pkg <- Sys.getenv('_R_CHECK_PACKAGE_NAME_', NA)) || pkg != name) return(FALSE)
+  tryCatch(packageVersion(name) <= version, error = function(e) FALSE)
+}

@@ -270,6 +270,11 @@ datatable = function(
     if (identical(options$lengthMenu, c(10, 25, 50, 100)))
       options$lengthMenu = NULL  # that is just the default
   }
+  if (!is.null(options[['search']]) && !is.list(options[['search']])) {
+    # TODO: remove this hack after desctable > 0.1.7 is on CRAN
+    if (!check_old_package('desctable', '0.1.7'))
+      stop("The value of `search` in `options` must be NULL or a list")
+  }
 
   # record fillContainer and autoHideNavigation
   if (!is.null(fillContainer)) params$fillContainer = fillContainer
@@ -720,9 +725,11 @@ DT2BSClass = function(class) {
     'cell-border' = 'table-bordered', 'compact' = 'table-condensed',
     'hover' = 'table-hover', 'stripe' = 'table-striped'
   )
+  # translate known default styling classes to BS table classes and keep
+  # unknown classes as they are
   class = c(
     BSclass[intersect(class, names(BSclass))],
-    grep('^table-', class, value = TRUE)
+    setdiff(class, names(BSclass))
   )
   class = unique(c('table', class))
   paste(class, collapse = ' ')

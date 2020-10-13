@@ -191,7 +191,11 @@ name2int = function(name, names, rownames, noerror = FALSE) {
 
 colFormatter = function(name, names, rownames = TRUE, template, ...) {
   i = name2int(name, names, rownames)
-  js = sprintf("function(data, type, row, meta) { return %s }", template(...))
+  # see https://datatables.net/reference/option/columns.render
+  # #837 we only want to use the formatting for the "display" purpose
+  js = sprintf("function(data, type, row, meta) {
+    return type !== 'display' ? data : %s
+  }", template(...))
   Map(function(i, js) list(targets = i, render = JS(js)), i, js, USE.NAMES = FALSE)
 }
 
@@ -385,7 +389,7 @@ styleColorBar = function(data, color, angle=90) {
   rg = range(data, na.rm = TRUE, finite = TRUE)
   r1 = rg[1]; r2 = rg[2]; r = r2 - r1
   JS(sprintf(
-    "isNaN(parseFloat(value)) || value <= %f ? '' : 'linear-gradient(%fdeg, transparent ' + (%f - value)/%f * 100 + '%%, %s ' + (%f - value)/%f * 100 + '%%)'",
+    "isNaN(parseFloat(value)) || value <= %f ? '' : 'linear-gradient(%fdeg, transparent ' + Math.max(%f - value, 0)/%f * 100 + '%%, %s ' + Math.max(%f - value, 0)/%f * 100 + '%%)'",
     r1, angle, r2, r, color, r2, r
   ))
 }
