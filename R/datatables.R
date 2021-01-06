@@ -58,7 +58,9 @@
 #'   it's containing element. If the table can't fit fully into it's container
 #'   then vertical and/or horizontal scrolling of the table cells will occur.
 #' @param autoHideNavigation \code{TRUE} to automatically hide navigational UI
-#'   when the number of total records is less than the page size.
+#'   (only display the table body) when the number of total records is less
+#'   than the page size. Note, it only works on the client-side processing mode
+#'   and the `pageLength` option should be provided explicitly.
 #' @param selection the row/column selection mode (single or multiple selection
 #'   or disable selection) when a table widget is rendered in a Shiny app;
 #'   alternatively, you can use a list of the form \code{list(mode = 'multiple',
@@ -254,7 +256,9 @@ datatable = function(
   params$extensions = if (length(extensions)) as.list(extensions)
 
   # automatically configure options and callback for extensions
-  if ('Responsive' %in% extensions) options$responsive = TRUE
+  if ('Responsive' %in% extensions && is.null(options$responsive)) {
+    options$responsive = TRUE
+  }
 
   params$caption = captionString(caption)
 
@@ -270,15 +274,17 @@ datatable = function(
     if (identical(options$lengthMenu, c(10, 25, 50, 100)))
       options$lengthMenu = NULL  # that is just the default
   }
-  if (!is.null(options[['search']]) && !is.list(options[['search']])) {
-    # TODO: remove this hack after desctable > 0.1.7 is on CRAN
-    if (!check_old_package('desctable', '0.1.7'))
-      stop("The value of `search` in `options` must be NULL or a list")
-  }
+  if (!is.null(options[['search']]) && !is.list(options[['search']]))
+    stop("The value of `search` in `options` must be NULL or a list")
 
   # record fillContainer and autoHideNavigation
   if (!is.null(fillContainer)) params$fillContainer = fillContainer
-  if (!is.null(autoHideNavigation)) params$autoHideNavigation = autoHideNavigation
+  if (!is.null(autoHideNavigation)) {
+    if (isTRUE(autoHideNavigation) && length(options$pageLength) == 0L)
+      warning("`autoHideNavigation` will be ignored if the `pageLength` option is not provided.",
+              immediate. = TRUE)
+    params$autoHideNavigation = autoHideNavigation
+  }
 
   params = structure(modifyList(params, list(
     data = data, container = as.character(container), options = options,
