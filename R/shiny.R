@@ -162,7 +162,7 @@ renderDataTable = function(
       uiFunc = dataTableOutput,
       renderFunc = function(shinysession, name, ...) {
         domain = tempVarsPromiseDomain(outputInfoEnv, outputName = name, session = shinysession)
-
+        removeTimestampFromSnapshot(name)
         promises::with_promise_domain(domain, renderFunc())
       },
       cacheHint = cacheHint
@@ -172,7 +172,7 @@ renderDataTable = function(
       uiFunc = dataTableOutput,
       renderFunc = function(shinysession, name, ...) {
         domain = tempVarsPromiseDomain(outputInfoEnv, outputName = name, session = shinysession)
-
+        removeTimestampFromSnapshot(name)
         promises::with_promise_domain(domain, renderFunc())
       }
     )
@@ -207,6 +207,13 @@ setAll = function(lst, env) {
     assign(name, val, env)
   })
   invisible()
+}
+
+removeTimestampFromSnapshot = function(name) {
+  shiny::snapshotPreprocessInput(paste0(name, "_state"), function(value) {
+    value$time <- NULL
+    value
+  })
 }
 
 # This promise domain is needed to set/unset temporary variables in
@@ -334,10 +341,11 @@ selectCells = function(proxy, selected, ignore.selectable = FALSE) {
 addRow = function(proxy, data, resetPaging = TRUE) {
   if ((is.matrix(data) || is.data.frame(data)) && nrow(data) != 1)
     stop("'data' must be of only one row")
+  rn <- rownames(data); if (!is.null(rn)) rn <- I(rn)
   # must apply unname() after as.list() because a data.table object
   # can't be really unnamed. The names() attributes will be
   # preserved but with empty strings (see #760).
-  invokeRemote(proxy, 'addRow', list(unname(as.list(data)), I(rownames(data)), resetPaging))
+  invokeRemote(proxy, 'addRow', list(unname(as.list(data)), rn, resetPaging))
 }
 
 #' @rdname proxy
@@ -456,11 +464,38 @@ reloadData = function(
 #'   enabled column filters, you should also make sure the attributes of every
 #'   column remain the same, e.g. factor columns should have the same or fewer
 #'   levels, and numeric columns should have the same or smaller range,
-#'   otherwise the filters may never be able to reach certain rows in the data.
+#'   otherwise the filters may never be able to reach certain rows in the data,
+#'   unless you explicitly update the filters with \code{updateFilters()}.
 #' @export
 replaceData = function(proxy, data, ..., resetPaging = TRUE, clearSelection = 'all') {
   dataTableAjax(proxy$session, data, ..., outputId = proxy$rawId)
   reloadData(proxy, resetPaging, clearSelection)
+}
+
+#' @rdname replaceData
+#' @export
+updateFilters = function(proxy, data) {
+  # calculate the values to be supplied to the filters based on column type
+  new_lims = lapply(data, function(x) {
+    if (inherits(x, c('numeric'))) {
+      range(x)
+    } else if (inherits(x, c('factor', 'logical'))) {
+      as.character(unique(x))
+    } else if (inherits(x, c('Date'))) {
+      as.numeric(as.POSIXct.Date(range(x))) * 100
+    } else if (inherits(x, 'POSIXt')) {
+      round(as.numeric(range(x)), digits = 2) * 100000
+    } else {
+      stop('updateFilters() requires all columns to be one of the following classes: numeric, factor, logical, Date, POSIXt')
+    }
+  })
+
+  # as of DT 0.19, numeric values fed to the sliders need to be multiplied by
+  # 10; e.g. 5.7 will be converted to 57
+  new_lims = unname(lapply(new_lims, function(x) if (is.numeric(x)) x * 10 else x))
+
+  # Trigger the JavaScript to update the filters
+  invokeRemote(proxy, 'updateFilters', list(new_lims))
 }
 
 invokeRemote = function(proxy, method, args = list()) {
@@ -543,14 +578,15 @@ dataTableAjax = function(session, data, rownames, filter = dataTablesFilter, out
 
 sessionDataURL = function(session, data, id, filter) {
 
-  URLdecode = shinyFun('URLdecode')
   toJSON = shinyFun('toJSON')
   httpResponse = shinyFun('httpResponse')
 
   filterFun = function(data, req) {
     # DataTables requests were sent via POST
-    params = URLdecode(rawToChar(req$rook.input$read()))
+    params = rawToChar(req$rook.input$read())
+    # I don't think the browser would send out nonASCII strings, but keep it as it is
     Encoding(params) = 'UTF-8'
+    # shiny::parseQueryString() calls httpuv::decodeURIComponent() internally and will handle encoding correctly
     params = shiny::parseQueryString(params, nested = TRUE)
 
     res = tryCatch(filter(data, params), error = function(e) {
