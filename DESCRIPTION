@@ -1,7 +1,7 @@
 Package: DT
 Type: Package
 Title: A Wrapper of the JavaScript Library 'DataTables'
-Version: 0.21
+Version: 0.22
 Authors@R: c(
     person("Yihui", "Xie", email = "xie@yihui.name", role = c("aut", "cre")),
     person("Joe", "Cheng", role = "aut"),
@@ -16,6 +16,7 @@ Authors@R: c(
     person("Bartek", "Szopka", role = c("ctb", "cph"), comment = "jquery.highlight.js in htmlwidgets/lib"),
     person("Alex", "Pickering", role = c("ctb")),
     person("William", "Holmes", role = c("ctb")),
+    person("Mikko", "Marttila", role = c("ctb")),
     person("RStudio, PBC", role = "cph")
     )
 Maintainer: Yihui Xie <xie@yihui.name>
@@ -33,7 +34,7 @@ VignetteBuilder: knitr
 RoxygenNote: 7.1.2
 Encoding: UTF-8
 NeedsCompilation: no
-Packaged: 2022-02-26 03:47:41 UTC; yihui
+Packaged: 2022-03-28 13:35:17 UTC; yihui
 Author: Yihui Xie [aut, cre],
   Joe Cheng [aut],
   Xianying Tan [aut],
@@ -47,6 +48,7 @@ Author: Yihui Xie [aut, cre],
   Bartek Szopka [ctb, cph] (jquery.highlight.js in htmlwidgets/lib),
   Alex Pickering [ctb],
   William Holmes [ctb],
+  Mikko Marttila [ctb],
   RStudio, PBC [cph]
 Repository: CRAN
-Date/Publication: 2022-02-26 11:10:02 UTC
+Date/Publication: 2022-03-28 14:20:02 UTC
