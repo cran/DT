@@ -1,15 +1,15 @@
-2783a1b0e7a01fe929f273ada397a823 *DESCRIPTION
+3c3c9ff66ce460a15cd062d4096d91f7 *DESCRIPTION
 8f8e30ddcfbdb0d31e9a4fa3cea22f5d *LICENSE
 a58f66a2bd7d310db82981b62f873a1e *NAMESPACE
 e262c8b1f80e6fb785c63f600cd49386 *R/datatables.R
 03109ade9fdcfbb95ca7c764415da0ce *R/format.R
 9555f86ca1c70d1064d759b018f9dc42 *R/package.R
-0858f5986f13386d21ba26221be6a9fe *R/shiny.R
+123a64a33f1f6a2a4f97723289f93d16 *R/shiny.R
 1af5a44e2144f6eb746407d820c9d5b7 *R/utils.R
 42ca71035563f575f0b04a895cc8e858 *build/vignette.rds
 18dfd85ea2a9a49d2d1851db97154ad9 *inst/NEWS.Rd
 8cc09765492ca147ba4ec10604ee64d3 *inst/doc/DT.Rmd
-b64ac6f4d0e16f600bbb8cd2eef3a673 *inst/doc/DT.html
+08b3cd8b15861e3f1972047b25633deb *inst/doc/DT.html
 71abd2a48dfda62caf5aefd1cfbc7010 *inst/examples/DT-click/DESCRIPTION
 565bad45b8c6aaf40ac55af94202b66b *inst/examples/DT-click/Readme.md
 d4800258fcd978916f24ca62ba637607 *inst/examples/DT-click/rsconnect/shinyapps.io/yihui/DT-click.dcf
@@ -103,7 +103,7 @@ f86128b99fd6cee0c8bb25d7d8d60773 *inst/htmlwidgets/lib/datatables-extensions/But
 4dd21c3a5392a5ff6d633e2f911d098a *inst/htmlwidgets/lib/datatables-extensions/Buttons/js/buttons.print.min.js
 6c396a2cef809b839964cf37a8b839dd *inst/htmlwidgets/lib/datatables-extensions/Buttons/js/buttons.semanticui.min.js
 4f0b061bd91df7d0e97edb833a15efec *inst/htmlwidgets/lib/datatables-extensions/Buttons/js/dataTables.buttons.min.js
-88731e24340ce38647f6d595f0e464cb *inst/htmlwidgets/lib/datatables-extensions/Buttons/js/jszip.min.js
+b5d02b3f0bf3ae026451909419df07bb *inst/htmlwidgets/lib/datatables-extensions/Buttons/js/jszip.min.js
 2e2f0419e2df56d7dbb4e12faf917719 *inst/htmlwidgets/lib/datatables-extensions/Buttons/js/pdfmake.js
 795e143b8f4eeb5089b2638cdeca7006 *inst/htmlwidgets/lib/datatables-extensions/Buttons/js/vfs_fonts.js
 6ab6e9e6714b015c185cc61543db9fb4 *inst/htmlwidgets/lib/datatables-extensions/ColReorder/css/colReorder.bootstrap.min.css
@@ -340,8 +340,8 @@ a11083b61e4d8795588e25496cd35515 *inst/htmlwidgets/lib/nouislider/jquery.nouisli
 146435eeda32f0e12bca8519f0da5ad9 *inst/htmlwidgets/lib/selectize/selectize.min.js
 dc1e55e634686698ce6fb3fc7382e1b0 *man/DT-imports.Rd
 3d92c5924ab55925e4039d40209d94f8 *man/coerceValue.Rd
-6669cf0807e4b1b1254b1b67b6462414 *man/dataTableAjax.Rd
-4dda55e8de71403b234c7191499b6858 *man/dataTableOutput.Rd
+6a140985e02948736333b735a1456982 *man/dataTableAjax.Rd
+41e26197c32e874791c23ab6fd3939c9 *man/dataTableOutput.Rd
 59dbe5e71b2cc86751d0edd1eaff0d5b *man/datatable.Rd
 b85e0fea2b0f26d6bcb2357435b1e4ee *man/doColumnSearch.Rd
 49572d56a6452f92a70f8e526522572b *man/editData.Rd
@@ -351,7 +351,7 @@ b85e0fea2b0f26d6bcb2357435b1e4ee *man/doColumnSearch.Rd
 010155c0001b03cb6f175013e6a2dd96 *man/styleInterval.Rd
 49d82f553cda217a65d2b44e82c92fd4 *man/tableHeader.Rd
 9eb0f29063c57866f0bd03d792d9f5e6 *tests/test-all.R
-a935cee70e317c0575ed79b4d837908e *tests/testit/test-datatables.R
+60140dc2de851c987ce68a48c60252db *tests/testit/test-datatables.R
 cb6601a0d7402e37202f9e9e6c60a379 *tests/testit/test-format.R
 caa5a46f408d5595b4915bb1782ba0e4 *tests/testit/test-search.R
 675c85c26d5ceeae7b2b638de544612e *tests/testit/test-utils.R
