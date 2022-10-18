@@ -1,7 +1,7 @@
 Package: DT
 Type: Package
 Title: A Wrapper of the JavaScript Library 'DataTables'
-Version: 0.25
+Version: 0.26
 Authors@R: c(
     person("Yihui", "Xie", email = "xie@yihui.name", role = c("aut", "cre")),
     person("Joe", "Cheng", role = "aut"),
@@ -18,6 +18,7 @@ Authors@R: c(
     person("William", "Holmes", role = c("ctb")),
     person("Mikko", "Marttila", role = c("ctb")),
     person("Andres", "Quintero", role = c("ctb")),
+    person("Stéphane", "Laurent", role = c("ctb")),
     person("RStudio, PBC", role = "cph")
     )
 Maintainer: Yihui Xie <xie@yihui.name>
@@ -36,7 +37,7 @@ VignetteBuilder: knitr
 RoxygenNote: 7.2.1
 Encoding: UTF-8
 NeedsCompilation: no
-Packaged: 2022-09-12 21:55:21 UTC; yihui
+Packaged: 2022-10-18 23:11:25 UTC; yihui
 Author: Yihui Xie [aut, cre],
   Joe Cheng [aut],
   Xianying Tan [aut],
@@ -52,6 +53,7 @@ Author: Yihui Xie [aut, cre],
   William Holmes [ctb],
   Mikko Marttila [ctb],
   Andres Quintero [ctb],
+  Stéphane Laurent [ctb],
   RStudio, PBC [cph]
 Repository: CRAN
-Date/Publication: 2022-09-12 22:40:02 UTC
+Date/Publication: 2022-10-19 00:17:54 UTC
