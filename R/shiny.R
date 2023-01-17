@@ -7,6 +7,8 @@
 #' @inheritParams shiny::dataTableOutput
 #' @param width the width of the table container
 #' @param height the height of the table container
+#' @param fill passed to \code{htmlwidgets::\link{shinyWidgetOutput}()}, see
+#'   there for explanation (requires \pkg{htmlwidgets} > v1.5.4).
 #' @references \url{https://rstudio.github.io/DT/shiny.html}
 #' @export
 #' @examples # !formatR
@@ -22,11 +24,13 @@
 #'     }
 #'   )
 #' }
-dataTableOutput = function(outputId, width = '100%', height = 'auto') {
+dataTableOutput = function(outputId, width = '100%', height = 'auto', fill = TRUE) {
+  args = list(outputId, 'datatables', width, height, package = 'DT')
+  if ("fill" %in% names(formals(htmlwidgets::shinyWidgetOutput)))
+    args$fill = fill
+
   htmltools::attachDependencies(
-    htmlwidgets::shinyWidgetOutput(
-      outputId, 'datatables', width, height, package = 'DT'
-    ),
+    do.call(htmlwidgets::shinyWidgetOutput, args),
     crosstalk::crosstalkLibs(),
     append = TRUE
   )
@@ -775,7 +779,7 @@ doGlobalSearch = function(data, search_string, options = list()) {
     for (j in seq_len(ncol(data))) {
       for (k in seq_len(nv)) {
         i0 = grep2(
-          v[k], as.character(data[, j]),
+          v[k], as.character(data[, j, drop = TRUE]),
           fixed = !(options$regex %||% FALSE),
           ignore.case = options$caseInsensitive %||% TRUE
         )
