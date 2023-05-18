@@ -1,7 +1,7 @@
 Package: DT
 Type: Package
 Title: A Wrapper of the JavaScript Library 'DataTables'
-Version: 0.27
+Version: 0.28
 Authors@R: c(
     person("Yihui", "Xie", email = "xie@yihui.name", role = c("aut", "cre")),
     person("Joe", "Cheng", role = "aut"),
@@ -19,7 +19,7 @@ Authors@R: c(
     person("Mikko", "Marttila", role = c("ctb")),
     person("Andres", "Quintero", role = c("ctb")),
     person("Stéphane", "Laurent", role = c("ctb")),
-    person("RStudio, PBC", role = "cph")
+    person(given = "Posit Software, PBC", role = c("cph", "fnd"))
     )
 Maintainer: Yihui Xie <xie@yihui.name>
 Description: Data objects in R can be rendered as HTML tables using the
@@ -37,7 +37,7 @@ VignetteBuilder: knitr
 RoxygenNote: 7.2.3
 Encoding: UTF-8
 NeedsCompilation: no
-Packaged: 2023-01-17 19:02:58 UTC; yihui
+Packaged: 2023-05-17 13:56:11 UTC; yihui
 Author: Yihui Xie [aut, cre],
   Joe Cheng [aut],
   Xianying Tan [aut],
@@ -54,6 +54,6 @@ Author: Yihui Xie [aut, cre],
   Mikko Marttila [ctb],
   Andres Quintero [ctb],
   Stéphane Laurent [ctb],
-  RStudio, PBC [cph]
+  Posit Software, PBC [cph, fnd]
 Repository: CRAN
-Date/Publication: 2023-01-17 21:10:02 UTC
+Date/Publication: 2023-05-18 11:22:37 UTC
