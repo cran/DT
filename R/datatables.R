@@ -891,6 +891,7 @@ normalizeStyle = function(style) {
   }
 
   bs_v = as.numeric(bslib::theme_version(theme)[1])
+  if (length(bs_v) == 0) return('default')
   # TODO: If DT adds support for BS > 5, update this logic
   if (bs_v > 5) bs_v = 5
   style = paste0("bootstrap", if (bs_v > 3) bs_v)
@@ -932,7 +933,11 @@ DTDependencies = function(style) {
 
 # translate DataTables classes to Bootstrap table classes
 DT2BSClass = function(class) {
-  class = unlist(strsplit(class, '\\s+'))
+  class = if (is.list(class)) {
+    names(which(unlist(class)))
+  } else {
+    unlist(strsplit(class, '\\s+'))
+  }
   if ('display' %in% class)
     class = unique(c('stripe', 'hover', 'row-border', 'order-column', class))
   BSclass = c(
