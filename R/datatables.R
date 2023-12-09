@@ -275,6 +275,10 @@ datatable = function(
   if (length(colnames) && colnames[1] == ' ')
     options = appendColumnDefs(options, list(orderable = FALSE, targets = 0))
 
+  # enable column names for column reordering by default
+  for (j in seq_len(ncol(data)))
+    options = appendColumnDefs(options, list(name = names(data)[j], targets = j - 1))
+
   style = normalizeStyle(style)
   if (grepl('^bootstrap', style)) class = DT2BSClass(class)
   if (style != 'default') params$style = style
@@ -435,7 +439,7 @@ makeEditableField = function(x, data, rn) {
 }
 
 validateSelection = function(x) {
-  isRowColList = function(x) is.list(x) && names(x) %in% c('rows', 'cols')
+  isRowColList = function(x) is.list(x) && all(names(x) %in% c('rows', 'cols'))
   is2ColMatrix = function(x) is.matrix(x) && ncol(x) == 2L
   validator = list(
     mode = function(x) {
